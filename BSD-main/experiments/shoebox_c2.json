@@ -1,14 +1,14 @@
 {
-    "epochs": 100000,
+    "epochs": 2,
     "fs": 16000,
     "duration": 5.0,
     "wlen": 1024,
     "shift": 256,
-    "nsrc": 2,
+    "nsrc": 1,
     "rir_type": "shoebox",
     "predictions_path": "../predictions/",
     "weights_path": "../weights/",
     "inference_path": "/",
-    "train_path": "/",
-    "test_path": "/"
+    "train_path": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/train/",
+    "test_path": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/test/"
 }

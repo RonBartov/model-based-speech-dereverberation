@@ -1,0 +1,13 @@
+# tensorflow-macos #==2.13.0
+# tensorflow-metal==1.0.0
+tensorflow==2.13.0
+#numpy==1.21.6
+scipy==1.7.3
+matplotlib
+h5py
+hdf5storage==0.1.18
+soundfile
+librosa==0.8.0
+scikit-learn
+pyroomacoustics
+# nara_wpe

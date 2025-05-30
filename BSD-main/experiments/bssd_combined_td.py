@@ -103,7 +103,7 @@ class bssd(object):
 
     #---------------------------------------------------------
     def save_weights(self):
-
+        print(f"need to save weights here from {self.weights_file}")
         self.model.save_weights(self.weights_file)
 
         return
@@ -116,12 +116,14 @@ class bssd(object):
         print('train the model')
         while (self.epoch<self.config['epochs']) and self.check_date():
 
-            sid0 = self.fgen.generate_triplet_indices(speakers=20, utterances_per_speaker=3)
+            sid0 = self.fgen.generate_triplet_indices(speakers=1, utterances_per_speaker=3)
             z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid0)
             self.model.fit([z, r, pid[:,0], sid[:,0]], None, batch_size=len(sid0), epochs=1, verbose=0, shuffle=False, callbacks=[self.logger])
 
             self.epoch += 1
-            if (self.epoch%100)==0:
+            num_of_epochs_for_saving_weights = 2
+            
+            if (self.epoch%num_of_epochs_for_saving_weights)==0:
                 self.save_weights()
                 self.validate()
 

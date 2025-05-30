@@ -50,8 +50,9 @@ class feature_generator(object):
 
 
     #---------------------------------------------------------
-    def generate_triplet_indices(self, speakers=20, utterances_per_speaker=3):
-
+    
+    def generate_triplet_indices(self, speakers=1, utterances_per_speaker=3):
+        
         sid = np.random.choice(self.nspk, size=speakers, replace=False).astype(np.int32)
         sid = np.repeat(sid, utterances_per_speaker)
 
@@ -60,7 +61,7 @@ class feature_generator(object):
 
 
     #---------------------------------------------------------
-    def generate_multichannel_mixture(self, nsrc=2, sid=None, pid=None, analytic_adaption=False):
+    def generate_multichannel_mixture(self, nsrc=1, sid=None, pid=None, analytic_adaption=False):
 
         if sid is None:
             # choose nsrc random sid
@@ -99,7 +100,7 @@ class feature_generator(object):
 
 
     #---------------------------------------------------------
-    def generate_multichannel_mixtures(self, nsrc=2, sid=[None], pid=None, analytic_adaption=False):
+    def generate_multichannel_mixtures(self, nsrc=1, sid=[None], pid=None, analytic_adaption=False):
 
         nbatch = len(sid)
         
@@ -150,7 +151,7 @@ if __name__ == "__main__":
     fgen = feature_generator(config, set='train')
 
     t0 = time.time()
-    z, r, sid, pid = fgen.generate_multichannel_mixture(nsrc=2, analytic_adaption=True)
+    z, r, sid, pid = fgen.generate_multichannel_mixture(nsrc=1, analytic_adaption=True)
     t1 = time.time()
     print(t1-t0)
 
