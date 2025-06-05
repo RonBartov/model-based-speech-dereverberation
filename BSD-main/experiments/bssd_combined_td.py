@@ -10,6 +10,8 @@ import os
 import sys
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append(os.path.abspath('../'))
+sys.path.append("/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/model-based-speech-dereverberation/BSD-main")
+
 from keras.models import Sequential, Model
 from keras.layers import Layer, Dense, Activation, LSTM, Input, Lambda, BatchNormalization, LayerNormalization, Conv1D, Bidirectional
 from keras import activations
@@ -127,6 +129,17 @@ class bssd(object):
                 self.save_weights()
                 self.validate()
 
+    #---------------------------------------------------------
+    def save_rev_files(self):
+        count =  0
+        while (count < 3):
+            print(f"epcount number {count}")
+            sid0 = self.fgen.generate_triplet_indices(speakers=1, utterances_per_speaker=3)
+            z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid0)  # len(sid) = 1 for test
+
+            count += 1
+            
+
 
 
     #---------------------------------------------------------
@@ -200,7 +213,8 @@ if __name__ == "__main__":
     # parse command line args
     parser = argparse.ArgumentParser(description='speaker separation')
     parser.add_argument('--config_file', help='name of json configuration file', default='shoebox_c2.json')
-    parser.add_argument('mode', help='mode: [train, valid, plot]', nargs='?', choices=('train', 'valid', 'plot'), default='train')
+    #parser.add_argument('--mode', help='mode: [train, valid, plot]', nargs='?', choices=('train', 'valid', 'plot'), default='train')
+    parser.add_argument('--mode', help='mode: [train, valid, plot,save_rev_files]', nargs='?', choices=('train', 'valid', 'plot','save_rev_files'), default='train')
     args = parser.parse_args()
 
 
@@ -226,5 +240,9 @@ if __name__ == "__main__":
     if args.mode == 'plot':
         bssd = bssd(config)
         bssd.plot()
+
+    if args.mode == 'save_rev_files':
+        bssd = bssd(config)
+        bssd.save_rev_files()
 
 

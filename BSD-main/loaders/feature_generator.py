@@ -31,6 +31,8 @@ class feature_generator(object):
     #--------------------------------------------------------------------------
     def __init__(self, config, set='train'):
 
+        self.config = config
+        self.num_of_audio_files_counter = 0 # for testing
         self.fs = config['fs']
         self.samples = int(self.fs*config['duration'])
         self.set = set
@@ -59,9 +61,11 @@ class feature_generator(object):
         return sid
 
 
-
+    
     #---------------------------------------------------------
     def generate_multichannel_mixture(self, nsrc=1, sid=None, pid=None, analytic_adaption=False):
+        print(f"start generate multichannel single mixture")
+        global num_of_audio_files_counter
 
         if sid is None:
             # choose nsrc random sid
@@ -95,14 +99,41 @@ class feature_generator(object):
         z = irfft(Fz, n=self.samples, axis=0)                   # shape = (samples, nmic)
         r = irfft(Fr, n=self.samples, axis=0)                   # shape = (samples,)
 
+        # save reverberant multichannel signal
+        self.save_multichannel_audio(z=z,fs=self.config['fs'],output_path=self.config['rev_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
+        self.num_of_audio_files_counter += 1 
+
         return z, r, sid, pid
 
+
+    def save_multichannel_audio(self, z: np.ndarray, fs: int, output_path: str, filename: str = "mixture.wav"):
+        """
+        Save multichannel audio signal `z` to a specified path.
+
+        Args:
+            z (np.ndarray): Audio array of shape (samples, n_channels).
+            fs (int): Sampling rate.
+            output_path (str): Directory to save the audio.
+            filename (str): Output filename (default "mixture.wav").
+        """
+
+        os.makedirs(output_path, exist_ok=True)
+        file_path = os.path.join(output_path, filename)
+
+        # Ensure data is float32 for consistency and compatibility
+        if z.dtype != np.float32:
+            z = z.astype(np.float32)
+
+        # Save using soundfile
+        sf.write(file_path, z, samplerate=fs)
+
+        print(f"Saved multichannel audio to: {file_path}")
 
 
     #---------------------------------------------------------
     def generate_multichannel_mixtures(self, nsrc=1, sid=[None], pid=None, analytic_adaption=False):
-
-        nbatch = len(sid)
+        print(f"start generate multichannel mixtures")
+        nbatch = len(sid)  # always 3 ? 
         
         Bz = np.zeros(shape=(nbatch, self.samples, self.nmic), dtype=np.float32)
         Br = np.zeros(shape=(nbatch, self.samples), dtype=np.float32)

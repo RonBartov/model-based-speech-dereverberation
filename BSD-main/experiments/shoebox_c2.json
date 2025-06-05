@@ -10,5 +10,6 @@
     "weights_path": "../weights/",
     "inference_path": "/",
     "train_path": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/train/",
-    "test_path": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/test/"
+    "test_path": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/test/",
+    "rev_audio_files": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/reverberant_audio_files"
 }
