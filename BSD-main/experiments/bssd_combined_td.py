@@ -27,6 +27,7 @@ from utils.matplotlib_helpers import *
 from modules.beamforming_td import beamforming
 from modules.identification_td import identification
 
+from classic.wpe_wrapper import ClassicWPE
 
 np.set_printoptions(precision=3, threshold=3, edgeitems=3)
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -50,6 +51,8 @@ class bssd(object):
         self.creation_date = os.path.getmtime(self.filename)
         self.weights_file = self.config['weights_path'] + self.name + '.h5'
         self.predictions_file = self.config['predictions_path'] + self.name + '.mat'
+        self.predictions_file_for_compare = self.config['predictions_for_compare_path'] + self.name + '.mat'
+
         self.logger = Logger(self.name)
 
         self.samples = self.fgen.samples                # number of samples per utterance
@@ -64,6 +67,9 @@ class bssd(object):
         self.beamforming = beamforming(self.fgen)
         self.identification = identification(self.fgen)
         self.create_model()
+
+        # for benchmark
+        self.wpe_model = ClassicWPE()
 
         self.si_sdr = []
         self.eer = []
@@ -172,6 +178,39 @@ class bssd(object):
         save_numpy_to_mat(self.predictions_file, data)
 
 
+#---------------------------------------------------------
+    def validate_with_wpe(self):
+        # Generate validation data
+        SINGLE_UTERANCE = 1
+        sid = self.fgen.generate_triplet_indices(speakers=self.fgen.nspk, utterances_per_speaker=SINGLE_UTERANCE)
+        z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid)
+
+        # BSD prediction
+        y_bsd, _ = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=50)
+        si_sdr_bsd = self.beamforming.si_sdr(r, y_bsd)
+
+        # WPE dereverberation
+        y_wpe = self.wpe_model.dereverb_batch(z)
+
+        print(f"z shape {z.shape}, r shape {r.shape}, y_bsd shape {y_bsd.shape}, y_wpe shape {y_wpe.shape}")
+        si_sdr_wpe = self.beamforming.si_sdr(r, y_wpe)
+
+        # Save only relevant data
+        data = {
+            'z': z[0, :, 0],
+            'r': r[0, :],
+            'y_bsd': y_bsd[0, :],
+            'y_wpe': y_wpe[0, :],
+            'si_sdr_bsd': si_sdr_bsd,
+            'si_sdr_wpe': si_sdr_wpe,
+            'epoch': self.epoch,
+        }
+        save_numpy_to_mat(self.predictions_file_for_compare, data)
+
+        # Print for logging
+        print(f"SI-SDR BSD: {si_sdr_bsd:.2f} dB | SI-SDR WPE: {si_sdr_wpe:.2f} dB")
+
+    
 
     #---------------------------------------------------------
     def plot(self):
@@ -191,6 +230,38 @@ class bssd(object):
         filename = self.config['predictions_path'] + self.name + '_spectrogram.png'
         draw_subpcolor(data, legend, filename)
 
+
+    def plot_dereverb_comparison(self):
+
+        # Load saved .mat file
+        from scipy.io import loadmat
+        data = loadmat(self.predictions_file_for_compare)
+
+        z = data['z'].squeeze()
+        r = data['r'].squeeze()
+        y_bsd = data['y_bsd'].squeeze()
+        y_wpe = data['y_wpe'].squeeze()
+
+        # Normalize for visualization
+        z = z / np.max(np.abs(z))
+        r = r / np.max(np.abs(r))
+        y_bsd = y_bsd / np.max(np.abs(y_bsd))
+        y_wpe = y_wpe / np.max(np.abs(y_wpe))
+
+        # Compute log magnitude STFTs
+        def log_spec(signal):
+            return 20 * np.log10(np.abs(mstft(signal)) + 1e-6)
+
+        specs = [
+            log_spec(z),
+            log_spec(r),
+            log_spec(y_bsd),
+            log_spec(y_wpe)
+        ]
+
+        legend = ['Mixture $z(t)$', 'Clean $r(t)$', 'BSD output', 'WPE output']
+        filename = self.config['predictions_for_compare_path'] + self.name + '_dereverb_comparison.png'
+        draw_subpcolor(specs, legend, filename)
 
 
     #---------------------------------------------------------
@@ -214,7 +285,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='speaker separation')
     parser.add_argument('--config_file', help='name of json configuration file', default='shoebox_c2.json')
     #parser.add_argument('--mode', help='mode: [train, valid, plot]', nargs='?', choices=('train', 'valid', 'plot'), default='train')
-    parser.add_argument('--mode', help='mode: [train, valid, plot,save_rev_files]', nargs='?', choices=('train', 'valid', 'plot','save_rev_files'), default='train')
+    parser.add_argument('--mode', help='mode: [train, valid, plot,save_rev_files]', nargs='?', choices=('train', 'valid','valid_with_wpe', 'plot','plot_dereverb_comparison','save_rev_files'), default='train')
     args = parser.parse_args()
 
 
@@ -236,6 +307,14 @@ if __name__ == "__main__":
     if args.mode == 'valid':
         bssd = bssd(config)
         bssd.validate()
+
+    if args.mode == 'valid_with_wpe':
+        bssd = bssd(config)
+        bssd.validate_with_wpe()
+
+    if args.mode == 'plot_dereverb_comparison':
+        bssd = bssd(config)
+        bssd.plot_dereverb_comparison()
 
     if args.mode == 'plot':
         bssd = bssd(config)

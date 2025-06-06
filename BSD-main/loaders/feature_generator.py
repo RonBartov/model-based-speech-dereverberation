@@ -101,6 +101,7 @@ class feature_generator(object):
 
         # save reverberant multichannel signal
         self.save_multichannel_audio(z=z,fs=self.config['fs'],output_path=self.config['rev_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
+        self.save_multichannel_audio(z=r,fs=self.config['fs'],output_path=self.config['clean_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
         self.num_of_audio_files_counter += 1 
 
         return z, r, sid, pid
