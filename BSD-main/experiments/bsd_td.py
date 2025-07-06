@@ -10,7 +10,7 @@ import os
 import sys
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append(os.path.abspath('../'))
-sys.path.append("/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/model-based-speech-dereverberation/BSD-main")
+sys.path.append("/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/BSD-main")
 
 from keras.models import Sequential, Model
 from keras.layers import Layer, Dense, Activation, LSTM, Input, Lambda, BatchNormalization, LayerNormalization, Conv1D, Bidirectional
@@ -40,11 +40,16 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 class bssd(object):
 
-    def __init__(self, config, set='train'):
+    def __init__(self, config, set='train',verbose=1,speakers=20):
 
         self.config = config
         self.fgen = feature_generator(config, set)
         self.nsrc = config['nsrc']                      # number of concurrent speakers
+        self.speakers_per_batch = min(speakers, self.fgen.nspk)
+
+        if speakers > self.fgen.nspk:
+            print(f"[warn] --speakers clipped from {speakers} to {self.fgen.nspk}")
+        
 
         self.filename = os.path.basename(__file__)
         self.name = self.filename[:-3] + '_' + config['rir_type']
@@ -54,6 +59,7 @@ class bssd(object):
         self.predictions_file_for_compare = self.config['predictions_for_compare_path'] + self.name + '.mat'
 
         self.logger = Logger(self.name)
+        self.verbose = verbose
 
         self.samples = self.fgen.samples                # number of samples per utterance
         self.nmic = self.fgen.nmic                      # number of microphones
@@ -122,12 +128,16 @@ class bssd(object):
     def train(self):
 
         print('train the model')
+
         while (self.epoch<self.config['epochs']) and self.check_date():
+            
+            print(f"[epoch {self.epoch+1}] nspk seen by model = {self.fgen.nspk}")
 
-            sid0 = self.fgen.generate_triplet_indices(speakers=20, utterances_per_speaker=3)
+            sid0 = self.fgen.generate_triplet_indices(speakers=self.speakers_per_batch, utterances_per_speaker=3)
             z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid0)
-            self.model.fit([z, r, pid[:,0], sid[:,0]], None, batch_size=len(sid0), epochs=1, verbose=1, shuffle=False, callbacks=[self.logger])
-
+            self.model.fit([z, r, pid[:,0], sid[:,0]], None, batch_size=len(sid0), epochs=1, verbose=self.verbose, shuffle=False, callbacks=[self.logger])
+            print(f"✓ finished epoch {self.epoch + 1}/{self.config['epochs']}")
+            
             self.epoch += 1
             num_of_epochs_for_saving_weights = 2
             
@@ -140,7 +150,7 @@ class bssd(object):
         count =  0
         while (count < 3):
             print(f"epcount number {count}")
-            sid0 = self.fgen.generate_triplet_indices(speakers=20, utterances_per_speaker=3)
+            sid0 = self.fgen.generate_triplet_indices(speakers=self.speakers_per_batch, utterances_per_speaker=3)
             z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid0)  # len(sid) = 1 for test
 
             count += 1
@@ -283,9 +293,23 @@ if __name__ == "__main__":
 
     # parse command line args
     parser = argparse.ArgumentParser(description='speaker separation')
-    parser.add_argument('--config_file', help='name of json configuration file', default='shoebox_c2.json')
+    parser.add_argument('--config_file', 
+                    help='name of json configuration file', 
+                    default='shoebox_c2.json')
     #parser.add_argument('--mode', help='mode: [train, valid, plot]', nargs='?', choices=('train', 'valid', 'plot'), default='train')
-    parser.add_argument('--mode', help='mode: [train, valid, plot,save_rev_files]', nargs='?', choices=('train', 'valid','valid_with_wpe', 'plot','plot_dereverb_comparison','save_rev_files'), default='train')
+    parser.add_argument('--mode', 
+                    help='mode: [train, valid, plot,save_rev_files]', 
+                    nargs='?', 
+                    choices=('train', 'valid','valid_with_wpe', 'plot','plot_dereverb_comparison','save_rev_files'), 
+                    default='train')
+    parser.add_argument('--verbose', type=int, 
+                    choices=(0,1,2), 
+                    default=1,
+                    help='Keras verbosity: 0 = silent, 1 = progress-bar, 2 = one-line/epoch')
+    parser.add_argument('--speakers', type=int,
+                    default=20,                  
+                    help='How many distinct anchor speakers to sample per training iteration'
+)
     args = parser.parse_args()
 
 
@@ -301,7 +325,7 @@ if __name__ == "__main__":
 
 
     if args.mode == 'train':
-        bssd = bssd(config)
+        bssd = bssd(config, verbose=args.verbose, speakers=args.speakers)
         bssd.train()
 
     if args.mode == 'valid':

@@ -1,2 +1,9 @@
 **/doa_shoebox.mat
 **/rir_shoebox.mat
+**/bsd_td_shoebox.h5
+**/shoebox_c2.json
+data_set/**
+model-based-speech-dereverberation.code-workspace
+README.md
+__pycache__/
+*.pyc
