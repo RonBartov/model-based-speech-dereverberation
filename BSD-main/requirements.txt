@@ -1,3 +1,4 @@
+# python 3.8
 # tensorflow-macos #==2.13.0
 # tensorflow-metal==1.0.0
 tensorflow==2.13.0
@@ -10,4 +11,4 @@ soundfile
 librosa==0.8.0
 scikit-learn
 pyroomacoustics
-# nara_wpe
+nara_wpe

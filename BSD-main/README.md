@@ -47,7 +47,7 @@ python rir_loader.py
 To generate a set of 100 DOA bases, use:
 ```
 cd loaders
-python doa bases.py
+python doa_bases.py
 ```
 
 
