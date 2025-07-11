@@ -35,7 +35,7 @@ class audio_loader(object):
             print('unknown set name: ', set)
             quit(0)
 
-        self.file_list = glob.glob(path+'*.wav')
+        self.file_list = glob.glob(path + '*/' + '*.wav')  #glob.glob(path+'*.wav')
         self.numof_files = len(self.file_list)
 
         self.get_speakers()
@@ -92,17 +92,25 @@ class audio_loader(object):
 
     #-------------------------------------------------------------------------
     def load_random_files_from_speaker_id(self, speaker_id):
-
+        
+        num_of_rand_files = 0
+        chosen_files = []
+        speaker_name = self.speaker_keys[speaker_id]
         x = np.zeros((self.samples,), dtype=np.float32)
         n = 0
         while n<self.samples:
+            num_of_rand_files += 1
             f = np.random.choice(self.files_list_per_speaker[self.speaker_keys[speaker_id]])
+            chosen_files.append(f)
             s, fs = audioread(f)
             length = s.shape[0]
             n1 = min(n+length, self.samples)
             x[n:n1] = s[0:n1-n]
             n = n1
 
+        print(f"in 'load_random_files_from_speaker_id': \n"
+          f" number of files loaded: {num_of_rand_files}, speaker id: {speaker_id}, speaker name: {speaker_name}\n"
+          f"Files used:\n" + "\n".join(chosen_files) + "\n\n")
         return x
 
 
