@@ -67,7 +67,7 @@ class feature_generator(object):
 
     
     #---------------------------------------------------------
-    def generate_multichannel_mixture(self, nsrc=1, sid=None, pid=None, analytic_adaption=False):
+    def generate_multichannel_mixture(self, nsrc=1, sid=None, pid=None, analytic_adaption=False, save_reverberant_sig = False):
         print(f"start generate multichannel single mixture")
         global num_of_audio_files_counter
 
@@ -104,8 +104,9 @@ class feature_generator(object):
         r = irfft(Fr, n=self.samples, axis=0)                   # shape = (samples,)
 
         # save reverberant multichannel signal
-        self.save_multichannel_audio(z=z,fs=self.config['fs'],output_path=self.config['rev_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
-        self.save_multichannel_audio(z=r,fs=self.config['fs'],output_path=self.config['clean_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
+        if save_reverberant_sig:
+            self.save_multichannel_audio(z=z,fs=self.config['fs'],output_path=self.config['rev_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
+            self.save_multichannel_audio(z=r,fs=self.config['fs'],output_path=self.config['clean_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
         self.num_of_audio_files_counter += 1 
 
         return z, r, sid, pid
