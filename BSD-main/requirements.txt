@@ -12,3 +12,5 @@ librosa==0.8.0
 scikit-learn
 pyroomacoustics
 nara_wpe
+pandas
+ipdb # debug lib -optional

@@ -49,6 +49,9 @@ class feature_generator(object):
         self.rir_loader = rir_loader(config)
         self.rir_loader.generate_sets(self.doa_bases.doa_idx, self.ndoa)
 
+        self.is_save_weights = config.get("is_save_weights", True)
+
+
 
 
     #---------------------------------------------------------
@@ -104,10 +107,17 @@ class feature_generator(object):
         r = irfft(Fr, n=self.samples, axis=0)                   # shape = (samples,)
 
         # save reverberant multichannel signal
+
         if save_reverberant_sig:
             self.save_multichannel_audio(z=z,fs=self.config['fs'],output_path=self.config['rev_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
             self.save_multichannel_audio(z=r,fs=self.config['fs'],output_path=self.config['clean_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
         self.num_of_audio_files_counter += 1 
+
+        # if self.is_save_weights:
+        #     self.save_multichannel_audio(z=z,fs=self.config['fs'],output_path=self.config['rev_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
+        #     self.save_multichannel_audio(z=r,fs=self.config['fs'],output_path=self.config['clean_audio_files'], filename=f"audio_file_{self.num_of_audio_files_counter}.wav")
+        #     self.num_of_audio_files_counter += 1 
+
 
         return z, r, sid, pid
 
@@ -139,7 +149,7 @@ class feature_generator(object):
     #---------------------------------------------------------
     def generate_multichannel_mixtures(self, nsrc=1, sid=[None], pid=None, analytic_adaption=False):
         print(f"start generate multichannel mixtures")
-        nbatch = len(sid)  # always 3 ? 
+        nbatch = len(sid)  # always 3?
         
         Bz = np.zeros(shape=(nbatch, self.samples, self.nmic), dtype=np.float32)
         Br = np.zeros(shape=(nbatch, self.samples), dtype=np.float32)

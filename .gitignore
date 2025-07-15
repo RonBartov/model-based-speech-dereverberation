@@ -2,7 +2,16 @@
 **/rir_shoebox.mat
 **/bsd_td_shoebox.h5
 data_set/**
+logs/**
 model-based-speech-dereverberation.code-workspace
 README.md
 __pycache__/
 *.pyc
+BSD-main/experiments/test.py
+BSD-main/experiments/gpu_log.csv
+BSD-main/experiments/log_gpu.sh
+BSD-main/experiments/quick_mem.json
+BSD-main/experiments/val_curve.csv
+BSD-main/experiments/val_curve_crash_backup.csv
+BSD-main/experiments/val_curve_crash_backup.png
+gpu_log.csv
