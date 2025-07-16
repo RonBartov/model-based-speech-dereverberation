@@ -35,8 +35,10 @@ class audio_loader(object):
             print('unknown set name: ', set)
             quit(0)
 
-        self.file_list = glob.glob(path + '*/' + '*.wav')  #glob.glob(path+'*.wav')
+        # self.file_list = glob.glob(path + '*/' + '*.wav')  #glob.glob(path+'*.wav')
+        self.file_list = glob.glob(path + '*.wav')
         self.numof_files = len(self.file_list)
+        
 
         self.get_speakers()
         self.n_speakers = len(self.speaker_keys)
@@ -108,9 +110,10 @@ class audio_loader(object):
             x[n:n1] = s[0:n1-n]
             n = n1
 
-        print(f"in 'load_random_files_from_speaker_id': \n"
-          f" number of files loaded: {num_of_rand_files}, speaker id: {speaker_id}, speaker name: {speaker_name}\n"
-          f"Files used:\n" + "\n".join(chosen_files) + "\n\n")
+        #commented out prints about speakers and details on wav file used to generate
+        # print(f"in 'load_random_files_from_speaker_id': \n"
+        #   f" number of files loaded: {num_of_rand_files}, speaker id: {speaker_id}, speaker name: {speaker_name}\n"
+        #   f"Files used:\n" + "\n".join(chosen_files) + "\n\n")
         return x
 
 

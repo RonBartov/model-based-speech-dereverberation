@@ -312,7 +312,7 @@ class bssd(object):
         legend = ['Mixture $z(t)$', 'Clean $r(t)$', 'BSD output', 'WPE output']
         draw_subpcolor(specs, legend, save_path)
 
-        print(f"✅ Spectrogram saved to {save_path}")
+        print(f"Spectrogram saved to {save_path}")
 
     #---------------------------------------------------------
     def plot(self):
