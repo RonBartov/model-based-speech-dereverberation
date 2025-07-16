@@ -57,10 +57,15 @@ class feature_generator(object):
     #---------------------------------------------------------
     
     def generate_triplet_indices(self, speakers=20, utterances_per_speaker=3):
-    # `speakers` = number of distinct anchor speakers sampled for each
-    # training iteration.  It must be ≤ total speakers in the corpus (`nspk`);
-    # setting it too small (e.g. 1-2) makes each gradient update rely on very
-    # few identities, slowing convergence and increasing over-fit.
+    # Parameters:
+    # 'speakers' (int): Number of distinct speakers to sample from the dataset.
+    # 'utterances_per_speaker' (int): Number of utterances to replicate for each speaker.
+    #                   Typical usage:
+    #                   - training: use 2–3 utterances per speaker to allow variation and generalization.
+    #                   - validation: use 1 utterance per speaker to test performance independently.
+    # For example, if speakers=20 and utterances_per_speaker=3,
+    #     this will return 60 speaker IDs, with each of the 20 unique speakers
+    #     appearing 3 times.
     
         sid = np.random.choice(self.nspk, size=speakers, replace=False).astype(np.int32)
         sid = np.repeat(sid, utterances_per_speaker)

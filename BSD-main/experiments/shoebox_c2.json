@@ -1,18 +1,23 @@
 {
-    "epochs": 2,
+    "epochs": 500,
+    "batch_size": 8,
     "fs": 16000,
     "duration": 5.0,
     "wlen": 1024,
     "shift": 256,
     "nsrc": 1,
+    "is_load_weights": true,
+    "is_save_weights": true,
     "rir_type": "shoebox",
     "predictions_path": "../predictions/",
     "predictions_for_compare_path": "../predictions_for_compare/",
     "validation_comparison_results": "../validation_comparison_results/",
+    "validation_comparison_path": "../validation_comparison_results/",
     "weights_path": "../weights/",
     "inference_path": "/",
-    "train_path": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/train_draft/",
-    "test_path": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/test/",
-    "rev_audio_files": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/reverberant_audio_files",
-    "clean_audio_files": "/gpfs0/bgu-br/users/ronbart/model-based-speech-dereverberation/data_set/clean_audio_files"
+    "train_path": "/gpfs0/bgu-br/projects/wsj0/si_dt_05/*/",
+    "test_path": "/gpfs0/bgu-br/projects/wsj0/si_et_05/*/",
+    "rev_audio_files": "/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/data_set/reverberant_audio_files",
+    "clean_audio_files": "/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/data_set/clean_audio_files",
+    "log_path": "/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/logs"
 }

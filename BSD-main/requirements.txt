@@ -14,3 +14,4 @@ pyroomacoustics
 nara_wpe
 pandas
 ipdb # debug lib -optional
+pystoi

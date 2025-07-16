@@ -28,6 +28,8 @@ from classic.wpe_wrapper import ClassicWPE
 import pandas as pd
 import matplotlib.pyplot as plt
 import ipdb
+from pystoi import stoi
+
 
 np.set_printoptions(precision=3, threshold=3, edgeitems=3)
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -49,27 +51,27 @@ class bsd(object):
         self.fgen = feature_generator(config, set)
         self.nsrc = config['nsrc']                      # number of concurrent speakers
         self.speakers_per_batch = min(speakers, self.fgen.nspk)         # self.fgen.nspk - number of speakers in date set
-        self.batch_size = config.get('batch_size', 24)
-        self.val_batch_size = config.get("val_batch_size", self.batch_size)
+        self.batch_size = config.get('batch_size', 12)
+        self.validate_batch_size = config.get("validate_batch_size", self.batch_size)
         self.is_load_weights = config.get("is_load_weights", True)
         self.is_save_weights = config.get("is_save_weights", True)
-        
+
         os.makedirs(self.config['log_path'], exist_ok=True)
 
         if speakers > self.fgen.nspk:
             print(f"[warn] --speakers clipped from {speakers} to {self.fgen.nspk}")
-        if self.val_batch_size < self.batch_size:
-            self.val_batch_size = self.batch_size
-
-
-        
+        if self.validate_batch_size < self.batch_size:
+            self.validate_batch_size = self.batch_size
 
         self.filename = os.path.basename(__file__)
         self.name = self.filename[:-3] + '_' + config['rir_type']
         self.creation_date = os.path.getmtime(self.filename)
         self.weights_file = self.config['weights_path'] + self.name + '.h5'
         self.predictions_file = self.config['predictions_path'] + self.name + '.mat'
-        self.predictions_file_for_compare = self.config['predictions_for_compare_path'] + self.name + '.mat'
+        # self.predictions_file_for_compare = self.config['predictions_for_compare_path'] + self.name + '.mat'
+        self.predictions_file_for_compare = self.config['validation_comparison_path'] + self.name + '_bsd_vs_wpe_metrics.csv'
+        os.makedirs(self.config['validation_comparison_path'], exist_ok=True)
+
         self.timestamp = time.strftime("%Y%m%d-%H%M%S")
 
         self.logger = Logger(self.name)
@@ -173,24 +175,24 @@ class bsd(object):
 
         # while (self.epoch<self.config['epochs']) and self.check_date():
         while (self.epoch < self.config['epochs']):
-            
+
             print(f"[epoch {self.epoch+1}] nspk seen by model = {self.fgen.nspk}")
 
             sid0 = self.fgen.generate_triplet_indices(speakers=self.speakers_per_batch, utterances_per_speaker=3)
             z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid0)
-            self.model.fit([z, r, pid[:,0], sid[:,0]], 
-                            None, 
-                            batch_size=self.batch_size, 
-                            epochs=1, 
-                            verbose=self.verbose, 
-                            shuffle=False, 
+            self.model.fit([z, r, pid[:,0], sid[:,0]],
+                            None,
+                            batch_size=self.batch_size,
+                            epochs=1,
+                            verbose=self.verbose,
+                            shuffle=False,
                             callbacks=[self.logger])
             print(f"finished epoch {self.epoch + 1}/{self.config['epochs']}")
-            
+
 
 
             self.epoch += 1
-            if self.epoch <= 200:                 
+            if self.epoch <= 200:
                 save_every = 5          # first ephocs
             else:
                 save_every = 10         # advansed ephocs
@@ -202,7 +204,7 @@ class bsd(object):
                 self.save_weights()
 
                 # ---------- run validate_with_wpe() and log metrics ---------------
-                val_dict = self.validate_with_wpe()          # make sure validate_with_wpe() returns a dict
+                val_dict = self.validate_with_wpe(is_training=1)          # make sure validate_with_wpe() returns a dict
                 val_dict["epoch"] = self.epoch
                 self.history.append(val_dict)
 
@@ -220,7 +222,7 @@ class bsd(object):
             pd.DataFrame(self.history).to_csv("val_curve.csv", index=False)
             print("validation curve saved to val_curve.csv")
             df = pd.DataFrame(self.history)
-            
+
             # plt.plot(df["epoch"], df["val_wpe"])
             # plt.xlabel("epoch"); plt.ylabel("Validation WPE")
             # plt.title("Validation curve"); plt.tight_layout()
@@ -229,11 +231,11 @@ class bsd(object):
             # plt.close()
             fig, axes = plt.subplots(2, 1, figsize=(6, 8))
 
-            # subplot 1 – Validation WPE
-            axes[0].plot(df["epoch"], df["val_wpe"])
+            # subplot 1 – Validation STOI                ########### to replace with STOI
+            axes[0].plot(df["epoch"], df["val_stoi_bsd"])
             axes[0].set_xlabel("epoch")
-            axes[0].set_ylabel("Validation WPE")
-            axes[0].set_title("Validation WPE curve")
+            axes[0].set_ylabel("Validation STOI")
+            axes[0].set_title("Validation STOI curve")
 
             # subplot 2 – Validation SI-SDR
             axes[1].plot(df["epoch"], df["val_si_sdr"])
@@ -245,7 +247,7 @@ class bsd(object):
             plt.savefig(os.path.join(self.config['log_path'], "val_curve.png"))
             plt.savefig(os.path.join(self.config['log_path'], f"val_curve_{self.timestamp}.png"))
 
-            plt.close()
+            plt.close(fig)
 
     #---------------------------------------------------------
     def save_rev_files(self):
@@ -256,52 +258,83 @@ class bsd(object):
             z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid0)  # len(sid) = 1 for test
 
             count += 1
-            
 
+#---------------------------------------------------------
+    def validate_with_wpe(self, number_of_estimations=1,is_training=0):
 
+        # the 2 line below was moved to init as self.predictions_file_for_compare
+        # bc at init we load this data to save time
+        # results_dir = self.config['validation_comparison_results'] 
+        # os.makedirs(self.predictions_file_for_compare, exist_ok=True)
 
-    #---------------------------------------------------------
-    def validate(self):
+        # Create spectrogram subfolder if needed
+        spectrogram_dir = os.path.join(results_dir, "spectrograms")
+        os.makedirs(spectrogram_dir, exist_ok=True)
 
-        sid = self.fgen.generate_triplet_indices(speakers=self.fgen.nspk, utterances_per_speaker=3)
-        z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid)
-        y, E = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=self.val_batch_size)
+        results = {'method': [], 'si_sdr': [], 'stoi': []}
 
-        si_sdr = self.beamforming.si_sdr(r, y)
-        far, frr, eer = self.identification.calc_eer(E, sid[:,0])
-        print('SI-SDR:', si_sdr)
-        print('EER:', eer)
-        self.si_sdr = np.append(self.si_sdr, si_sdr)
-        self.eer = np.append(self.eer, eer)
+        for i in range(number_of_estimations):
+            print(f"\nEvaluation {i+1}/{number_of_estimations}")
 
-        data = {
-            'z': z[0,:,0],
-            'r': r[0,:],
-            'y': y[0,:],
-            'E': E,
-            'pid': pid,
-            'sid': sid,
-            'far': far,
-            'frr': frr,
-            'si_sdr': self.si_sdr,
-            'eer': self.eer,
-            'epoch': self.epoch,
-        }
-        if self.is_save_weights:
-            save_numpy_to_mat(self.predictions_file, data)
+            SINGLE_UTTERANCE = 1 # use 1 utterance per speaker to test performance independently in validation.
+            sid = self.fgen.generate_triplet_indices(speakers=self.fgen.nspk, utterances_per_speaker=SINGLE_UTTERANCE)
+            z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid)
+
+            y_bsd = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=1)
+            si_sdr_bsd = self.beamforming.si_sdr(r, y_bsd)
+            stoi_bsd = stoi(r[0], y_bsd[0], self.config['fs'], extended=False)
+
+            results['method'].append('BSD')
+            results['si_sdr'].append(si_sdr_bsd)
+            results['stoi'].append(stoi_bsd)
+
+            y_wpe = self.wpe_model.dereverb_batch(z)
+            si_sdr_wpe = self.beamforming.si_sdr(r, y_wpe)
+            stoi_wpe = stoi(r[0], y_wpe[0], self.config['fs'], extended=False)
+
+            results['method'].append('WPE')
+            results['si_sdr'].append(si_sdr_wpe)
+            results['stoi'].append(stoi_wpe)
+
+            print(f"BSD - SI-SDR: {si_sdr_bsd:.2f} dB | STOI: {stoi_bsd:.3f}")
+            print(f"WPE - SI-SDR: {si_sdr_wpe:.2f} dB | STOI: {stoi_wpe:.3f}")
+
+            # Save spectrogram comparison for this estimation
+            spectrogram_path = os.path.join(
+                spectrogram_dir,
+                f"{self.name}_dereverb_comparison_estimation_{i+1}.png"
+            )
+
+            self.plot_spectograms_comparison_bsd_wpe(
+                z=z[0,:,0],
+                r=r[0,:],
+                y_bsd=y_bsd[0,:],
+                y_wpe=y_wpe[0,:],
+                save_path=spectrogram_path
+            )
+
+        df = pd.DataFrame(results)
+        # csv_path = os.path.join(results_dir, self.name + '_bsd_vs_wpe_metrics.csv') # moved to init as self.predictions_file_for_compare
+        df.to_csv(self.predictions_file_for_compare, index=False)
+        print(f"\nMetrics saved to {self.predictions_file_for_compare}")
+
+        if not is_training:
+            self.plot_bsd_vs_wpe_metrics(self.predictions_file_for_compare, results_dir)
+        
+        return {'val_si_sdr': float(si_sdr_bsd), 'val_stoi_bsd': float(stoi_bsd)}
 
 
 #---------------------------------------------------------
-    def validate_with_wpe(self):
+    def validate_with_wpe_old(self):
         # Generate validation data
         SINGLE_UTERANCE = 1
         sid = self.fgen.generate_triplet_indices(speakers=self.fgen.nspk, utterances_per_speaker=SINGLE_UTERANCE)
         z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid)
 
         # BSD prediction
-        # y_bsd, _ = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=self.val_batch_size) #--------------IDENTIFICATION------------------------------
+        # y_bsd, _ = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=self.validate_batch_size) #--------------IDENTIFICATION------------------------------
 
-        y_bsd = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=self.val_batch_size)
+        y_bsd = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=self.validate_batch_size)
         # print(f"Number of outputs: {len(y_bsd) if isinstance(y_bsd, list) else 1}")
 
         si_sdr_bsd = self.beamforming.si_sdr(r, y_bsd)
@@ -332,13 +365,84 @@ class bsd(object):
 
         return {'val_si_sdr': float(si_sdr_bsd), 'val_wpe': float(si_sdr_wpe)}
 
-    
+    def plot_bsd_vs_wpe_metrics(self, csv_path, results_dir):
+
+        df = pd.read_csv(csv_path)
+
+        estimations = list(range(1, (len(df)//2) + 1))
+        bsd_si_sdr = df[df['method'] == 'BSD']['si_sdr'].values
+        wpe_si_sdr = df[df['method'] == 'WPE']['si_sdr'].values
+        bsd_stoi = df[df['method'] == 'BSD']['stoi'].values
+        wpe_stoi = df[df['method'] == 'WPE']['stoi'].values
+
+        # Colors
+        color_bsd = 'blue'
+        color_wpe = 'orange'
+
+        # Plot SI-SDR
+        plt.figure(figsize=(10, 6))
+        plt.plot(estimations, bsd_si_sdr, marker='o', color=color_bsd, label='BSD')
+        plt.plot(estimations, wpe_si_sdr, marker='s', color=color_wpe, label='WPE')
+        plt.title('SI-SDR Comparison: BSD vs WPE')
+        plt.xlabel('Estimation #')
+        plt.ylabel('SI-SDR (dB)')
+        plt.grid(True)
+        plt.legend()
+        si_sdr_plot_path = os.path.join(results_dir, self.name + '_si_sdr_comparison.png')
+        plt.savefig(si_sdr_plot_path)
+        plt.close()
+        print(f"SI-SDR plot saved to {si_sdr_plot_path}")
+
+        # Plot STOI
+        plt.figure(figsize=(10, 6))
+        plt.plot(estimations, bsd_stoi, marker='o', color=color_bsd, label='BSD')
+        plt.plot(estimations, wpe_stoi, marker='s', color=color_wpe, label='WPE')
+        plt.title('STOI Comparison: BSD vs WPE')
+        plt.xlabel('Estimation #')
+        plt.ylabel('STOI (unitless, 0-1)')
+        plt.ylim(0, 1)
+        plt.grid(True)
+        plt.legend()
+        stoi_plot_path = os.path.join(results_dir, self.name + '_stoi_comparison.png')
+        plt.savefig(stoi_plot_path)
+        plt.close()
+        print(f"STOI plot saved to {stoi_plot_path}")
+
+    #---------------------------------------------------------
+    def plot_spectograms_comparison_bsd_wpe(self, z, r, y_bsd, y_wpe, save_path):
+        """
+        Generates and saves a spectrogram comparison plot for a single estimation.
+        """
+
+        # Normalize for visualization
+        z = z / np.max(np.abs(z))
+        r = r / np.max(np.abs(r))
+        y_bsd = y_bsd / np.max(np.abs(y_bsd))
+        y_wpe = y_wpe / np.max(np.abs(y_wpe))
+
+        # Compute log magnitude STFTs
+        def log_spec(signal):
+            return 20 * np.log10(np.abs(mstft(signal)) + 1e-6)
+
+        specs = [
+            log_spec(z),
+            log_spec(r),
+            log_spec(y_bsd),
+            log_spec(y_wpe)
+        ]
+
+        legend = ['Mixture $z(t)$', 'Clean $r(t)$', 'BSD output', 'WPE output']
+        draw_subpcolor(specs, legend, save_path)
+
+        print(f"Spectrogram saved to {save_path}")
+
+
 
     #---------------------------------------------------------
     def plot(self):
 
         z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc)
-        
+
         data = []
         z0 = z[0,:,0]/np.amax(np.abs(z[0,:,0]))
         data.append( 20*np.log10(np.abs(mstft(z0))) )
@@ -358,7 +462,7 @@ class bsd(object):
         # Load saved .mat file
         from scipy.io import loadmat
         data = loadmat(self.predictions_file_for_compare)
-        
+
         z = data['z'].squeeze()
         r = data['r'].squeeze()
         y_bsd = data['y_bsd'].squeeze()
@@ -405,21 +509,21 @@ if __name__ == "__main__":
 
     # parse command line args
     parser = argparse.ArgumentParser(description='speaker separation')
-    parser.add_argument('--config_file', 
-                    help='name of json configuration file', 
+    parser.add_argument('--config_file',
+                    help='name of json configuration file',
                     default='shoebox_c2.json')
     #parser.add_argument('--mode', help='mode: [train, valid, plot]', nargs='?', choices=('train', 'valid', 'plot'), default='train')
-    parser.add_argument('--mode', 
-                    help='mode: [train, valid, plot,save_rev_files]', 
-                    nargs='?', 
-                    choices=('train', 'valid','valid_with_wpe', 'plot','plot_dereverb_comparison','save_rev_files'), 
+    parser.add_argument('--mode',
+                    help='mode: [train, valid, plot,save_rev_files]',
+                    nargs='?',
+                    choices=('train', 'valid','valid_with_wpe', 'plot','plot_dereverb_comparison','save_rev_files'),
                     default='train')
-    parser.add_argument('--verbose', type=int, 
-                    choices=(0,1,2), 
+    parser.add_argument('--verbose', type=int,
+                    choices=(0,1,2),
                     default=1,
                     help='Keras verbosity: 0 = silent, 1 = progress-bar, 2 = one-line/epoch')
     parser.add_argument('--speakers', type=int,
-                    default=20,                  
+                    default=20,
                     help='How many distinct anchor speakers to sample per training iteration'
 )
     args = parser.parse_args()
