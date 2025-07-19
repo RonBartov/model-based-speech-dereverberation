@@ -45,12 +45,14 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 class bsd(object):
 
-    def __init__(self, config, set='train',verbose=1,speakers=20):
+    def __init__(self, config, set='train',verbose=1):
 
         self.config = config
         self.fgen = feature_generator(config, set)
         self.nsrc = config['nsrc']                      # number of concurrent speakers
-        self.speakers_per_batch = min(speakers, self.fgen.nspk)         # self.fgen.nspk - number of speakers in date set
+
+        self.speakers_configed = config.get("speakers", 20)
+        self.speakers_per_batch = min(self.speakers_configed, self.fgen.nspk)         # self.fgen.nspk - number of speakers in date set
         self.batch_size = config.get('batch_size', 12)
         self.validate_batch_size = config.get("validate_batch_size", self.batch_size)
         self.is_load_weights = config.get("is_load_weights", True)
@@ -58,8 +60,8 @@ class bsd(object):
 
         os.makedirs(self.config['log_path'], exist_ok=True)
 
-        if speakers > self.fgen.nspk:
-            print(f"[warn] --speakers clipped from {speakers} to {self.fgen.nspk}")
+        if self.speakers_configed > self.fgen.nspk:
+            print(f"[warn] --speakers clipped from {self.speakers_configed} to {self.fgen.nspk}")
         if self.validate_batch_size < self.batch_size:
             self.validate_batch_size = self.batch_size
 
@@ -93,24 +95,44 @@ class bsd(object):
         # for benchmark
         self.wpe_model = ClassicWPE()
 
-        self.si_sdr_bsd = []
-        self.si_sdr_wpe = []
+
         self.epoch = 0
+        history_path = os.path.join(self.config['log_path'], "val_curve.csv")
+        self.history = []
 
-        if self.is_load_weights:
-            # data = load_numpy_from_mat(self.predictions_file)
-            data = load_numpy_from_mat(self.predictions_file_for_compare)
-            print(data.keys())
-            # ipdb.set_trace()
+        if self.is_load_weights: 
+            if os.path.exists(history_path):
+                df = pd.read_csv(history_path)
+                self.history = df.to_dict(orient="records")  # convert to list of dicts
 
-            if data is not None:
-                if 'epoch' in data.keys():
-                    self.epoch = data['epoch']
-                    self.si_sdr_bsd = data['si_sdr_bsd']
-                    self.si_sdr_wpe = data['si_sdr_wpe']
-                    # self.eer = data['eer']
+                if len(df) > 0:
+                    self.epoch = int(df["epoch"].max())
+                    print(f"Loaded history: {len(df)} epochs (resuming from epoch {self.epoch+1})")
+                else:
+                    print("val_curve.csv is empty. Starting from scratch.")
+            else:
+                print("No val_curve.csv found. Starting from scratch.")
         else:
-            print("skipping load_state (flag=False)", flush=True)
+            print("Skipping load_state (flag=False)", flush=True)
+
+
+        # self.si_sdr_bsd = []
+        # self.si_sdr_wpe = []
+        # self.epoch = 0
+        # if self.is_load_weights:
+        #     # data = load_numpy_from_mat(self.predictions_file)
+        #     data = load_numpy_from_mat(self.predictions_file_for_compare)
+        #     print(data.keys())
+        #     # ipdb.set_trace()
+
+        #     if data is not None:
+        #         if 'epoch' in data.keys():
+        #             self.epoch = data['epoch']
+        #             self.si_sdr_bsd = data['si_sdr_bsd']
+        #             self.si_sdr_wpe = data['si_sdr_wpe']
+        #             # self.eer = data['eer']
+        # else:
+        #     print("skipping load_state (flag=False)", flush=True)
 
 
 
@@ -268,6 +290,7 @@ class bsd(object):
         # os.makedirs(self.predictions_file_for_compare, exist_ok=True)
 
         # Create spectrogram subfolder if needed
+        results_dir = self.config['validation_comparison_path'] 
         spectrogram_dir = os.path.join(results_dir, "spectrograms")
         os.makedirs(spectrogram_dir, exist_ok=True)
 
@@ -522,10 +545,7 @@ if __name__ == "__main__":
                     choices=(0,1,2),
                     default=1,
                     help='Keras verbosity: 0 = silent, 1 = progress-bar, 2 = one-line/epoch')
-    parser.add_argument('--speakers', type=int,
-                    default=20,
-                    help='How many distinct anchor speakers to sample per training iteration'
-)
+
     args = parser.parse_args()
 
 
@@ -541,7 +561,7 @@ if __name__ == "__main__":
 
 
     if args.mode == 'train':
-        bsd = bsd(config, verbose=args.verbose, speakers=args.speakers)
+        bsd = bsd(config, verbose=args.verbose)
         try:
             bsd.train()
         except Exception as e:

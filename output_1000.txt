@@ -1,0 +1,11 @@
+start generate multichannel single mixture
+10/10 [==============================] - 1s 120ms/step
+BSD - SI-SDR: 12.35 dB | STOI: 0.994
+WPE - SI-SDR: 3.68 dB | STOI: 0.988
+/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/BSD-main/utils/matplotlib_helpers.py:98: RuntimeWarning: More than 20 figures have been opened. Figures created through the pyplot interface (`matplotlib.pyplot.figure`) are retained until explicitly closed and may consume too much memory. (To control this warning, see the rcParam `figure.max_open_warning`). Consider using `matplotlib.pyplot.close()`.
+  fig = plt.figure()
+Spectrogram saved to ../validation_comparison_results/spectrograms/bsd_td_shoebox_dereverb_comparison_estimation_1.png
+
+Metrics saved to ../validation_comparison_results/bsd_td_shoebox_bsd_vs_wpe_metrics.csv
+[val] epoch 1000  val_si_sdr=12.352  val_stoi_bsd=0.994
+validation curve saved to val_curve.csv

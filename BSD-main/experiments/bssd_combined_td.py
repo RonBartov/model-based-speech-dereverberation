@@ -50,6 +50,21 @@ class bssd(object):
         self.fgen = feature_generator(config, set)
         self.nsrc = config['nsrc']                      # number of concurrent speakers
 
+        self.speakers_configed = config.get("speakers", 20)
+        self.speakers = min(self.speakers_configed, self.fgen.nspk)         # self.fgen.nspk - number of speakers in date set
+        self.batch_size = config.get('batch_size', 12)
+        self.validate_batch_size = config.get("validate_batch_size", self.batch_size)
+        self.is_load_weights = config.get("is_load_weights", True)
+        self.is_save_weights = config.get("is_save_weights", True)
+
+        os.makedirs(self.config['log_path'], exist_ok=True)
+
+        if self.speakers_configed > self.fgen.nspk:
+            print(f"[warn] --speakers clipped from {self.speakers_configed} to {self.fgen.nspk}")
+        if self.validate_batch_size < self.batch_size:
+            self.validate_batch_size = self.batch_size
+
+
         self.filename = os.path.basename(__file__)
         self.name = self.filename[:-3] + '_' + config['rir_type']
         self.creation_date = os.path.getmtime(self.filename)
@@ -78,6 +93,10 @@ class bssd(object):
         self.si_sdr = []
         self.eer = []
         self.epoch = 0
+        self.hist_si_sdr, self.hist_stoi = [], []      # training curves
+        self.best_metric = -1e9                        # higher is better
+        self.chkpt_path   = os.path.join(self.logdir, "weights.h5")
+
         data = load_numpy_from_mat(self.predictions_file)
         if data is not None:
             if 'epoch' in data.keys():
@@ -128,14 +147,17 @@ class bssd(object):
         print('train the model')
         while (self.epoch<self.config['epochs']) and self.check_date():
 
-            sid0 = self.fgen.generate_triplet_indices(speakers=20, utterances_per_speaker=3)
+            sid0 = self.fgen.generate_triplet_indices(speakers=self.speakers, utterances_per_speaker=3)
             z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid0)
             self.model.fit([z, r, pid[:,0], sid[:,0]], None, batch_size=len(sid0), epochs=1, verbose=1, shuffle=False, callbacks=[self.logger])
 
             self.epoch += 1
-            num_of_epochs_for_saving_weights = 2
+            if self.epoch <= 200:
+                save_every = 5  # first epochs
+            else:
+                save_every = 10  # advanced epochs
             
-            if (self.epoch%num_of_epochs_for_saving_weights)==0:
+            if (self.epoch % save_every)==0:
                 self.save_weights()
                 self.validate()
 
@@ -144,7 +166,7 @@ class bssd(object):
         count =  0
         while (count < 3):
             print(f"epcount number {count}")
-            sid0 = self.fgen.generate_triplet_indices(speakers=20, utterances_per_speaker=3)
+            sid0 = self.fgen.generate_triplet_indices(speakers=self.speakers, utterances_per_speaker=3)
             z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid0)  # len(sid) = 1 for test
 
             count += 1

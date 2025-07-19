@@ -1,6 +1,5 @@
 **/doa_shoebox.mat
 **/rir_shoebox.mat
-**/bsd_td_shoebox.h5
 data_set/**
 logs/**
 model-based-speech-dereverberation.code-workspace
