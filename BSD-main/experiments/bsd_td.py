@@ -8,7 +8,10 @@ import sys
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append(os.path.abspath('../'))
 sys.path.append("/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/BSD-main")
-
+import pandas as pd
+from pystoi import stoi
+import matplotlib.pyplot as plt
+from pesq import pesq
 from keras.models import Sequential, Model
 from keras.layers import Layer, Dense, Activation, LSTM, Input, Lambda, BatchNormalization, LayerNormalization, Conv1D, Bidirectional
 from keras import activations
@@ -461,6 +464,162 @@ class bsd(object):
 
 
 
+    #--------additional logic for validating bsd model--------
+    #---------------------------------------------------------
+    def validate_with_wpe_for_bsd(self, number_of_estimations=1):
+
+        results_dir = self.config['validation_comparison_results']
+        os.makedirs(results_dir, exist_ok=True)
+
+        # Create spectrogram subfolder if needed
+        spectrogram_dir = os.path.join(results_dir, "spectrograms")
+        os.makedirs(spectrogram_dir, exist_ok=True)
+
+        results = {'method': [], 'si_sdr': [], 'stoi': [], 'pesq': []}
+
+        for i in range(number_of_estimations):
+            print(f"\nEvaluation {i+1}/{number_of_estimations}")
+
+            SINGLE_UTTERANCE = 1
+            sid = self.fgen.generate_triplet_indices(speakers=self.fgen.nspk, utterances_per_speaker=SINGLE_UTTERANCE)
+            z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid)
+
+            y_bssd = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=1)
+            si_sdr_bssd = self.beamforming.si_sdr(r, y_bssd)
+            stoi_bssd = stoi(r[0], y_bssd[0], self.config['fs'], extended=False)
+            pesq_bssd = pesq(self.config['fs'], r[0], y_bssd[0], mode='wb')
+            
+            results['method'].append('BSSD')
+            results['si_sdr'].append(si_sdr_bssd)
+            results['stoi'].append(stoi_bssd)
+            results['pesq'].append(pesq_bssd)
+
+            y_wpe = self.wpe_model.dereverb_batch(z)
+            si_sdr_wpe = self.beamforming.si_sdr(r, y_wpe)
+            stoi_wpe = stoi(r[0], y_wpe[0], self.config['fs'], extended=False)
+            pesq_wpe = pesq(self.config['fs'], r[0], y_wpe[0], mode='wb')
+
+            results['method'].append('WPE')
+            results['si_sdr'].append(si_sdr_wpe)
+            results['stoi'].append(stoi_wpe)
+            results['pesq'].append(pesq_wpe)
+
+            print(f"BSSD - SI-SDR: {si_sdr_bssd:.2f} dB | STOI: {stoi_bssd:.3f} | PESQ: {pesq_bssd:.2f}")
+            print(f"WPE  - SI-SDR: {si_sdr_wpe:.2f} dB | STOI: {stoi_wpe:.3f} | PESQ: {pesq_wpe:.2f}")
+
+            # Save spectrogram comparison for this estimation
+            spectrogram_path = os.path.join(
+                spectrogram_dir,
+                f"{self.name}_dereverb_comparison_estimation_{i+1}.png"
+            )
+
+            self.plot_spectograms_comparison_bssd_wpe(
+                z=z[0,:,0],
+                r=r[0,:],
+                y_bssd=y_bssd[0,:],
+                y_wpe=y_wpe[0,:],
+                save_path=spectrogram_path
+            )
+
+        df = pd.DataFrame(results)
+        csv_path = os.path.join(results_dir, self.name + '_vs_wpe_metrics_results.csv')
+        df.to_csv(csv_path, index=False)
+        print(f"\nMetrics saved to {csv_path}")
+
+        self.plot_bssd_vs_wpe_metrics(csv_path, results_dir)
+
+    
+    #---------------------------------------------------------
+    def plot_bssd_vs_wpe_metrics(self, csv_path, results_dir):
+
+        df = pd.read_csv(csv_path)
+
+        estimations = list(range(1, (len(df)//2) + 1))
+        bssd_si_sdr = df[df['method'] == 'BSSD']['si_sdr'].values
+        wpe_si_sdr = df[df['method'] == 'WPE']['si_sdr'].values
+        bssd_stoi = df[df['method'] == 'BSSD']['stoi'].values
+        wpe_stoi = df[df['method'] == 'WPE']['stoi'].values
+        bssd_pesq = df[df['method'] == 'BSSD']['pesq'].values
+        wpe_pesq = df[df['method'] == 'WPE']['pesq'].values
+
+        # Colors
+        color_bssd = 'blue'
+        color_wpe = 'orange'
+
+        # Plot SI-SDR
+        plt.figure(figsize=(10, 6))
+        plt.plot(estimations, bssd_si_sdr, marker='o', color=color_bssd, label='BSD')
+        plt.plot(estimations, wpe_si_sdr, marker='s', color=color_wpe, label='WPE')
+        plt.title('SI-SDR Comparison: BSD vs WPE')
+        plt.xlabel('Estimation Number')
+        plt.ylabel('SI-SDR (dB)')
+        plt.grid(True)
+        plt.legend()
+        si_sdr_plot_path = os.path.join(results_dir, self.name + '_si_sdr_comparison.png')
+        plt.savefig(si_sdr_plot_path)
+        plt.close()
+        print(f"SI-SDR plot saved to {si_sdr_plot_path}")
+
+        # Plot STOI
+        plt.figure(figsize=(10, 6))
+        plt.plot(estimations, bssd_stoi, marker='o', color=color_bssd, label='BSD')
+        plt.plot(estimations, wpe_stoi, marker='s', color=color_wpe, label='WPE')
+        plt.title('STOI Comparison: BSD vs WPE')
+        plt.xlabel('Estimation Number')
+        plt.ylabel('STOI (unitless, 0-1)')
+        plt.ylim(0, 1)
+        plt.grid(True)
+        plt.legend()
+        stoi_plot_path = os.path.join(results_dir, self.name + '_stoi_comparison.png')
+        plt.savefig(stoi_plot_path)
+        plt.close()
+        print(f"STOI plot saved to {stoi_plot_path}")
+
+        # Plot PESQ
+        plt.figure(figsize=(10, 6))
+        plt.plot(estimations, bssd_pesq, marker='o', color=color_bssd, label='BSD')
+        plt.plot(estimations, wpe_pesq, marker='s', color=color_wpe, label='WPE')
+        plt.title('PESQ Comparison: BSD vs WPE')
+        plt.xlabel('Estimation Number')
+        plt.ylabel('PESQ (MOS-LQO)')
+        plt.ylim(1, 5)
+        plt.grid(True)
+        plt.legend()
+        pesq_plot_path = os.path.join(results_dir, self.name + '_pesq_comparison.png')
+        plt.savefig(pesq_plot_path)
+        plt.close()
+        print(f"PESQ plot saved to {pesq_plot_path}")
+
+    #---------------------------------------------------------
+    def plot_spectograms_comparison_bssd_wpe(self, z, r, y_bssd, y_wpe, save_path):
+        """
+        Generates and saves a spectrogram comparison plot for a single estimation.
+        """
+
+        # Normalize for visualization
+        z = z / np.max(np.abs(z))
+        r = r / np.max(np.abs(r))
+        y_bssd = y_bssd / np.max(np.abs(y_bssd))
+        y_wpe = y_wpe / np.max(np.abs(y_wpe))
+
+        # Compute log magnitude STFTs
+        def log_spec(signal):
+            return 20 * np.log10(np.abs(mstft(signal)) + 1e-6)
+
+        specs = [
+            log_spec(z),
+            log_spec(r),
+            log_spec(y_bssd),
+            log_spec(y_wpe)
+        ]
+
+        legend = ['Reverberant $z(t)$', 'Clean $r(t)$', 'BSSD output', 'WPE output']
+        draw_subpcolor(specs, legend, save_path)
+
+        print(f"Spectrogram saved to {save_path}")
+
+    #-----end of additional logic for validating bsd model----
+
     #---------------------------------------------------------
     def plot(self):
 
@@ -539,7 +698,7 @@ if __name__ == "__main__":
     parser.add_argument('--mode',
                     help='mode: [train, valid, plot,save_rev_files]',
                     nargs='?',
-                    choices=('train', 'valid','valid_with_wpe', 'plot','plot_dereverb_comparison','save_rev_files'),
+                    choices=('train', 'valid','valid_with_wpe_for_bsd', 'plot','plot_dereverb_comparison','save_rev_files'),
                     default='train')
     parser.add_argument('--verbose', type=int,
                     choices=(0,1,2),
@@ -577,9 +736,9 @@ if __name__ == "__main__":
         bsd = bsd(config)
         bsd.validate()
 
-    if args.mode == 'valid_with_wpe':
+    if args.mode == 'valid_with_wpe_for_bsd':
         bsd = bsd(config)
-        bsd.validate_with_wpe()
+        bsd.validate_with_wpe_for_bsd(number_of_estimations=30)
 
     if args.mode == 'plot_dereverb_comparison':
         bsd = bsd(config)
