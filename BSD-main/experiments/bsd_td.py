@@ -38,6 +38,7 @@ from pystoi import stoi
 
 np.set_printoptions(precision=3, threshold=3, edgeitems=3)
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+tf.config.run_functions_eagerly(True)
 # tf.debugging.set_log_device_placement(True)
 
 
@@ -54,12 +55,15 @@ class bsd(object):
 
         self.config = config
         self.fgen = feature_generator(config, set)
+        self.fgen_va = feature_generator(config, set="valid")   # ← new
         self.nsrc = config['nsrc']                      # number of concurrent speakers
+        self.timestamp = time.strftime("%Y%m%d-%H%M%S")
 
         self.speakers_configed = config.get("speakers", 20)
         self.speakers_per_batch = min(self.speakers_configed, self.fgen.nspk)         # self.fgen.nspk - number of speakers in date set
         self.batch_size = config.get('batch_size', 12)
-        self.validate_batch_size = config.get("validate_batch_size", self.batch_size)
+        self.validation_batch_configed = config.get("validate_batch_size", self.batch_size)
+        self.validate_batch_size = min(self.validation_batch_configed,self.fgen_va.nspk )
         self.is_load_weights = config.get("is_load_weights", True)
         self.is_save_weights = config.get("is_save_weights", True)
 
@@ -67,19 +71,19 @@ class bsd(object):
 
         if self.speakers_configed > self.fgen.nspk:
             print(f"[warn] --speakers clipped from {self.speakers_configed} to {self.fgen.nspk}")
-        if self.validate_batch_size < self.batch_size:
-            self.validate_batch_size = self.batch_size
+
 
         self.filename = os.path.basename(__file__)
         self.name = self.filename[:-3] + '_' + config['rir_type']
         self.creation_date = os.path.getmtime(self.filename)
-        self.weights_file = self.config['weights_path'] + self.name + '.h5'
+
+        self.weights_file = self.config['weights_path'] + self.name + '_2025_07_21.h5'
+        # self.weights_file = self.config['weights_path'] + self.name + '.h5'
         self.predictions_file = self.config['predictions_path'] + self.name + '.mat'
         # self.predictions_file_for_compare = self.config['predictions_for_compare_path'] + self.name + '.mat'
         self.predictions_file_for_compare = self.config['validation_comparison_path'] + self.name + '_bsd_vs_wpe_metrics.csv'
         os.makedirs(self.config['validation_comparison_path'], exist_ok=True)
 
-        self.timestamp = time.strftime("%Y%m%d-%H%M%S")
 
         self.logger = Logger(self.name)
         self.verbose = verbose
@@ -96,6 +100,7 @@ class bsd(object):
         self.beamforming = beamforming(self.fgen)
         # self.identification = identification(self.fgen) # ------------------------------ identification -----------------------------------
         self.create_model()
+        self._print_dataset_stats()
 
         # for benchmark
         self.wpe_model = ClassicWPE()
@@ -139,8 +144,41 @@ class bsd(object):
         # else:
         #     print("skipping load_state (flag=False)", flush=True)
 
+    #---------------------------------------------------------
 
+    def _print_dataset_stats(self,final_epoch=None):
+        # total clips in the subset
+        total_clips = len(self.fgen.audio_loader.file_list)
 
+        # clips the net sees each training step
+        clips_per_step = self.speakers_per_batch * 3      # speakers × 3 utt
+
+        # expected repeat factor r
+        r_est = (self.config["epochs"] * clips_per_step) / total_clips
+
+        # model capacity (params) vs examples
+        n_params = self.model.count_params()
+
+        fs = self.config['fs']
+        n_epochs = final_epoch or self.config["epochs"]
+
+        frames_per_clip = self.fgen.audio_loader.nfram
+        frames_per_step  = clips_per_step * frames_per_clip
+        total_frames_tr  = frames_per_step * n_epochs
+
+        frames_per_param = total_frames_tr/self.model.count_params()
+        print(f"  total training STFT frames              : {total_frames_tr}")
+        print(f"  STFT frames (examples) per parameter    : {frames_per_param:.0f}")
+
+        print("\n[DATA STATS]")
+        print(f"  total speakers           : {self.fgen.nspk}")
+        print(f"  total clips              : {total_clips}")
+        print(f"  speakers per batch       : {self.speakers_per_batch}")
+        print(f"  clips per step           : {clips_per_step}")
+        print(f"  planned epochs           : {self.config['epochs']}")
+        print(f"  total epochs             : {final_epoch}")
+        print(f"  estimated repeat factor r: {r_est:.2f}")
+        print(f"  model trainable params   : {n_params:,}\n")
 
     #---------------------------------------------------------
     def create_model(self):
@@ -194,9 +232,13 @@ class bsd(object):
 
     #---------------------------------------------------------
     def train(self):
-
+        # ipdb.set_trace()
         print('train the model')
-        self.history = []
+        if not self.history:
+            self.history = []        
+            
+        best_si_sdr = -np.inf
+        epochs_since_improvement = 0
         # print(f"--> self.epoch = {self.epoch}", flush=True)
         # print(f"--> self.config['epochs'] = {self.config['epochs']}", flush=True)
 
@@ -234,7 +276,18 @@ class bsd(object):
                 val_dict = self.validate_with_wpe(is_training=1)          # make sure validate_with_wpe() returns a dict
                 val_dict["epoch"] = self.epoch
                 self.history.append(val_dict)
-
+                
+                current_si_sdr = val_dict["val_si_sdr"]
+                
+                if current_si_sdr > best_si_sdr + 0.1:
+                    print(f"[checkpoint] val_si_sdr improved from {best_si_sdr:.3f} to {current_si_sdr:.3f}")
+                    best_si_sdr = current_si_sdr
+                    epochs_since_improvement = 0
+                    self.save_weights()
+                else:
+                    epochs_since_improvement += 1
+                    print(f"[early stop] no improvement for {epochs_since_improvement} epochs")
+                
                 # Save current validation curve
                 df = pd.DataFrame(self.history)
                 df.to_csv(os.path.join(self.config['log_path'], "val_curve.csv"), index=False)
@@ -243,6 +296,11 @@ class bsd(object):
                 # Print results
                 msg = "  ".join(f"{k}={v:.3f}" for k, v in val_dict.items() if k != "epoch")
                 print(f"[val] epoch {self.epoch}  {msg}", flush=True)
+
+                # Early stopping
+                if epochs_since_improvement >= 15:
+                    print(f"[early stop] stopping training at epoch {self.epoch} due to no improvement in val_si_sdr")
+                    break
 
         # --------------- write history once at the end -------------------
         if self.history:
@@ -305,10 +363,11 @@ class bsd(object):
             print(f"\nEvaluation {i+1}/{number_of_estimations}")
 
             SINGLE_UTTERANCE = 1 # use 1 utterance per speaker to test performance independently in validation.
-            sid = self.fgen.generate_triplet_indices(speakers=self.fgen.nspk, utterances_per_speaker=SINGLE_UTTERANCE)
-            z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid)
+            sid = self.fgen_va.generate_triplet_indices(speakers=self.fgen_va.nspk, utterances_per_speaker=SINGLE_UTTERANCE)
+            z, r, sid, pid = self.fgen_va.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid)
 
-            y_bsd = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=1)
+
+            y_bsd = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=self.validate_batch_size)
             si_sdr_bsd = self.beamforming.si_sdr(r, y_bsd)
             stoi_bsd = stoi(r[0], y_bsd[0], self.config['fs'], extended=False)
 
@@ -758,6 +817,9 @@ if __name__ == "__main__":
                 df.to_csv(os.path.join(self.config['log_path'],f"val_curve_crash_backup_{self.timestamp}.csv"), index=False)
                 print("Saved backup val_curve_crash_backup.csv after crash")
             raise
+
+        bsd._print_dataset_stats(final_epoch=self.epoch)
+
 
     if args.mode == 'valid':
         bsd = bsd(config)

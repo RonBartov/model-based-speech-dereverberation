@@ -25,10 +25,12 @@ class audio_loader(object):
         self.samples = int(self.fs*config['duration'])
         self.nfram = int(np.ceil( (self.samples-self.wlen+self.shift)/self.shift ))
         self.nbin = int(self.wlen/2+1)
-
+        self.set = set
 
         if set == 'train':
-            path = config['train_path']
+            path = config['train_path'] 
+        elif set == 'valid':
+            path = config['valid_path']
         elif set == 'test':
             path = config['test_path']
         else:
@@ -38,7 +40,8 @@ class audio_loader(object):
         # self.file_list = glob.glob(path + '*/' + '*.wav')  #glob.glob(path+'*.wav')
         self.file_list = glob.glob(path + '*.wav')
         self.numof_files = len(self.file_list)
-        
+        self.n_subset = config.get("n_subset_speakers",50)     # e.g. 50
+        self.seed  = config.get("split_seed", 1234)      # deterministic
 
         self.get_speakers()
         self.n_speakers = len(self.speaker_keys)
@@ -55,6 +58,16 @@ class audio_loader(object):
             speaker_keys.append(f.split('/')[-2])
 
         self.speaker_keys = sorted(list(set(speaker_keys)))
+
+        if self.set == "train" and self.n_subset is not None:
+            n = min(self.n_subset, len(self.speaker_keys))
+            rng = np.random.default_rng(self.seed)
+            rng.shuffle(self.speaker_keys)                     # one deterministic shuffle
+            self.speaker_keys = self.speaker_keys[: n] # keep first N after shuffle
+            print(f"[info] train: using {len(self.speaker_keys)}/{n} speakers "
+            f"(seed={self.seed})")
+
+
         self.nsid = len(self.speaker_keys)
 
         self.files_list_per_speaker = {}

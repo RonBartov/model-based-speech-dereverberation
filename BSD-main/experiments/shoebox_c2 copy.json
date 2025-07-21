@@ -1,16 +1,14 @@
 {
-    "epochs": 500,
+    "epochs": 1000,
     "batch_size": 8,
-    "speakers": 10,
-    "n_subset_speakers": 50,
+    "speakers": 1,
     "fs": 16000,
     "duration": 5.0,
     "wlen": 1024,
     "shift": 256,
     "nsrc": 1,
-    "is_load_weights": true,
-    "is_save_weights": true,
-    "split_seed": 1234,
+    "is_load_weights": false,
+    "is_save_weights": false,
     "rir_type": "shoebox",
     "predictions_path": "../predictions/",
     "predictions_for_compare_path": "../predictions_for_compare/",
@@ -18,10 +16,9 @@
     "validation_comparison_path": "../validation_comparison_results/",
     "weights_path": "../weights/",
     "inference_path": "/",
-    "train_path": "/gpfs0/bgu-br/projects/wsj0/si_tr_s/*/",
-    "valid_path": "/gpfs0/bgu-br/projects/wsj0/si_dt_05/*/",
+    "train_path": "/gpfs0/bgu-br/projects/wsj0/si_dt_05/*/",
     "test_path": "/gpfs0/bgu-br/projects/wsj0/si_et_05/*/",
     "rev_audio_files": "/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/data_set/reverberant_audio_files",
     "clean_audio_files": "/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/data_set/clean_audio_files",
-    "log_path": "../logs"
+    "log_path": "/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/logs"
 }
