@@ -457,7 +457,7 @@ if __name__ == "__main__":
     if args.mode == 'valid_with_wpe':
         bssd = bssd(config)
         # number of estimation should be number of times evaluating the si-sdr and stoi metrics
-        bssd.validate_with_wpe(number_of_estimations = 10)  
+        bssd.validate_with_wpe(number_of_estimations = 30)
 
     if args.mode == 'plot_dereverb_comparison':
         bssd = bssd(config)

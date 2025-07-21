@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 import time
 import numpy as np
+
 import argparse
 import json
 import os
 import sys
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append(os.path.abspath('../'))
-sys.path.append("/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/BSD-main")
+# sys.path.append("/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/BSD-main")
 import pandas as pd
 from pystoi import stoi
 import matplotlib.pyplot as plt
@@ -613,7 +615,7 @@ class bsd(object):
             log_spec(y_wpe)
         ]
 
-        legend = ['Reverberant $z(t)$', 'Clean $r(t)$', 'BSSD output', 'WPE output']
+        legend = ['Reverberant $z(t)$', 'Clean $r(t)$', 'BSD output', 'WPE output']
         draw_subpcolor(specs, legend, save_path)
 
         print(f"Spectrogram saved to {save_path}")
@@ -682,7 +684,32 @@ class bsd(object):
 
 
 
+    #----------------------------------------------------------
+    def export_model_summary(self):
+        summary_path = os.path.join(self.config['log_path'], self.name + '_model_summary.txt')
+        with open(summary_path, 'w') as f:
+            self.model.summary(print_fn=lambda x: f.write(x + '\n'))
+        print(f"[info] Model summary saved to: {summary_path}")
 
+    # ----------------------------------------------------------
+    def export_layer_info(self):
+        layer_data = []
+        for layer in self.model.layers:
+            try:
+                output_shape = layer.output_shape
+            except:
+                output_shape = "N/A"
+            layer_data.append({
+                "Layer Name": layer.name,
+                "Layer Type": layer.__class__.__name__,
+                "Output Shape": output_shape,
+                "Param #": layer.count_params()
+            })
+
+        df = pd.DataFrame(layer_data)
+        path = os.path.join(self.config['log_path'], self.name + "_layer_info.csv")
+        df.to_csv(path, index=False)
+        print(f"[info] Layer-wise info saved to: {path}")
 
 #---------------------------------------------------------
 #---------------------------------------------------------
@@ -696,9 +723,9 @@ if __name__ == "__main__":
                     default='shoebox_c2.json')
     #parser.add_argument('--mode', help='mode: [train, valid, plot]', nargs='?', choices=('train', 'valid', 'plot'), default='train')
     parser.add_argument('--mode',
-                    help='mode: [train, valid, plot,save_rev_files]',
+                    help='mode: [train, valid, plot,save_rev_files,valid_with_wpe_for_bsd,print_model_info]',
                     nargs='?',
-                    choices=('train', 'valid','valid_with_wpe_for_bsd', 'plot','plot_dereverb_comparison','save_rev_files'),
+                    choices=('train', 'valid','valid_with_wpe_for_bsd', 'plot','plot_dereverb_comparison','save_rev_files','print_model_info'),
                     default='train')
     parser.add_argument('--verbose', type=int,
                     choices=(0,1,2),
@@ -752,4 +779,12 @@ if __name__ == "__main__":
         bsd = bsd(config)
         bsd.save_rev_files()
 
+    if args.mode == 'print_model_info':
+        bsd_instance = bsd(config)
+        bsd_instance.export_model_summary()
+        bsd_instance.export_layer_info()
+
+        if os.path.exists(bsd_instance.weights_file):
+            size_MB = os.path.getsize(bsd_instance.weights_file) / (1024 * 1024)
+            print(f"[info] Model weights file size: {size_MB:.2f} MB")
 

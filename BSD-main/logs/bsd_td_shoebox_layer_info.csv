@@ -1,0 +1,7 @@
+Layer Name,Layer Type,Output Shape,Param #
+input_4,InputLayer,"[(None, 80000, 6)]",0
+input_5,InputLayer,"[(None, 80000)]",0
+input_6,InputLayer,"[(None, 1)]",0
+input_7,InputLayer,"[(None, 1)]",0
+model,Functional,"[(None, 1597, 500), (None, 80000), ()]",6176700
+add_loss,AddLoss,(),0

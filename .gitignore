@@ -14,3 +14,5 @@ BSD-main/experiments/val_curve.csv
 BSD-main/experiments/val_curve_crash_backup.csv
 BSD-main/experiments/val_curve_crash_backup.png
 gpu_log.csv
+.DS_Store
+.idea/

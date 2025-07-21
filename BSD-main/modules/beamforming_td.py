@@ -202,8 +202,9 @@ class beamforming(object):
         cost = Lambda(self.cost)([R, Y])
 
         self.model = Model(inputs=[Z, R, pid], outputs=[Py, Y, cost])
-
-
+        print("The beamformer class summary--- START \n")
+        self.model.summary()
+        print("The beamformer class summary--- END \n")
 
     #---------------------------------------------------------
     def si_sdr(self, s, y):
@@ -224,7 +225,6 @@ class beamforming(object):
         si_sdr = 10*np.log10(Ps) - 10*np.log10(Pn)
 
         return np.mean(si_sdr)
-
 
 
 
