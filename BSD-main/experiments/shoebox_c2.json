@@ -23,5 +23,6 @@
     "test_path": "/gpfs0/bgu-br/projects/wsj0/si_et_05/*/",
     "rev_audio_files": "/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/data_set/reverberant_audio_files",
     "clean_audio_files": "/gpfs0/bgu-br/users/yahelso/model-based-speech-dereverberation/data_set/clean_audio_files",
+    "audio_samples_comparison_path": "../validation_comparison_results/audio_samples_compare",
     "log_path": "../logs"
 }
