@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+import soundfile as sf
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append(os.path.abspath('../'))
@@ -77,7 +78,14 @@ class bsd(object):
         self.name = self.filename[:-3] + '_' + config['rir_type']
         self.creation_date = os.path.getmtime(self.filename)
 
-        self.weights_file = self.config['weights_path'] + self.name + '_2025_07_21.h5'
+        if set == 'valid':
+            self.weights_file = self.config['weights_path'] + 'bsd_test_overfit.h5'
+
+        else:
+            self.weights_file = self.config['weights_path'] + self.name + '_2025_07_21.h5'
+
+        print(f"\n DEFINED THE FOLLOWING WEIGHTS: \n {self.weights_file}.\n")
+
         # self.weights_file = self.config['weights_path'] + self.name + '.h5'
         self.predictions_file = self.config['predictions_path'] + self.name + '.mat'
         # self.predictions_file_for_compare = self.config['predictions_for_compare_path'] + self.name + '.mat'
@@ -589,7 +597,39 @@ class bsd(object):
 
         self.plot_bssd_vs_wpe_metrics(csv_path, results_dir)
 
-    
+    # ---------------------------------------------------------
+    def save_audio_samples_to_compare(self, number_of_estimations=1):
+
+        output_dir = self.config['audio_samples_comparison_path']
+        os.makedirs(output_dir, exist_ok=True)
+
+
+        for i in range(number_of_estimations):
+            print(f"\nEvaluation {i + 1}/{number_of_estimations}")
+
+            SINGLE_UTTERANCE = 1
+            sid = self.fgen.generate_triplet_indices(speakers=self.fgen.nspk,
+                                                     utterances_per_speaker=SINGLE_UTTERANCE)
+            z, r, sid, pid = self.fgen.generate_multichannel_mixtures(nsrc=self.nsrc, sid=sid)
+
+            y_bsd = self.model.predict([z, r, pid[:, 0], sid[:, 0]], batch_size=1)
+            y_wpe = self.wpe_model.dereverb_batch(z)
+
+            fs = self.config['fs']
+
+            # Extract 1D waveforms (already expected shape)
+            audio_signals = {
+                'mixture_z': z[0, :, 0],
+                'clean_r': r[0, :],
+                'bsd_output': y_bsd[0, :],
+                'wpe_output': y_wpe[0, :, 0] if y_wpe.ndim == 3 else y_wpe[0, :]
+            }
+
+            for name, signal in audio_signals.items():
+                path = os.path.join(output_dir, f"{name}_{i}.wav")
+                sf.write(path, signal, samplerate=fs)
+                print(f"[✓] Saved: {path}")
+
     #---------------------------------------------------------
     def plot_bssd_vs_wpe_metrics(self, csv_path, results_dir):
 
@@ -784,7 +824,7 @@ if __name__ == "__main__":
     parser.add_argument('--mode',
                     help='mode: [train, valid, plot,save_rev_files,valid_with_wpe_for_bsd,print_model_info]',
                     nargs='?',
-                    choices=('train', 'valid','valid_with_wpe_for_bsd', 'plot','plot_dereverb_comparison','save_rev_files','print_model_info'),
+                    choices=('train', 'valid','valid_with_wpe_for_bsd', 'plot','plot_dereverb_comparison','save_rev_files','print_model_info', 'save_audio_samples_to_compare'),
                     default='train')
     parser.add_argument('--verbose', type=int,
                     choices=(0,1,2),
@@ -826,8 +866,12 @@ if __name__ == "__main__":
         bsd.validate()
 
     if args.mode == 'valid_with_wpe_for_bsd':
-        bsd = bsd(config)
-        bsd.validate_with_wpe_for_bsd(number_of_estimations=30)
+        bsd = bsd(config, set='valid')
+        bsd.validate_with_wpe_for_bsd(number_of_estimations=50)
+
+    if args.mode == 'save_audio_samples_to_compare':
+        bsd = bsd(config, set='valid')
+        bsd.save_audio_samples_to_compare(number_of_estimations=3)
 
     if args.mode == 'plot_dereverb_comparison':
         bsd = bsd(config)
