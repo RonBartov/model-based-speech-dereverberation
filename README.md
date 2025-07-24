@@ -18,7 +18,7 @@ We perform evaluation using clean mono speech from WSJ0 convolved with simulated
 - matplotlib & seaborn
 - [nara_wpe](https://github.com/fgnt/nara_wpe) - classical dereverberation
 - [pystoi](https://github.com/mpariente/pystoi) - STOI evaluation
-- [pesq](https://github.com/ludlows/python-pesq) – PESQ evaluation
+- [pesq](https://github.com/ludlows/python-pesq) - PESQ evaluation
 - Custom RIR simulation using the image-source method
 
 ## Getting Started
