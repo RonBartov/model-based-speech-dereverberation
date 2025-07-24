@@ -6,7 +6,7 @@ A deep learning approach for speech dereverberation using neural beamforming, co
 
 In reverberant environments, speech signals recorded by microphones are significantly degraded due to reflections from surrounding surfaces. Dereverberation is crucial for improving speech clarity and the performance of downstream tasks like speaker identification and ASR.
 
-This project investigates whether model-based deep learning techniques, specifically the Beamformer-Only Speech Dereverberation (BSD) model, can outperform the classical Weighted Prediction Error (WPE) algorithm. BSD is derived from the BSSD architecture [Pfeifenberger & Pernkopf, 2021], isolating the beamforming and dereverberation components into a dedicated neural model.
+This project investigates whether model-based deep learning techniques, specifically the Beamformer-Only Speech Dereverberation (BSD) model, can outperform the classical Weighted Prediction Error (WPE) algorithm. BSD is derived from the BSSD architecture [Pfeifenberger & Pernkopf, 2022], isolating the beamforming and dereverberation components into a dedicated neural model.
 
 We perform evaluation using clean mono speech from WSJ0 convolved with simulated Room Impulse Responses (RIRs). The BSD model is trained to minimize SI-SDR loss and is compared to both the full BSSD model and WPE across STOI, SI-SDR, and PESQ metrics.
 
@@ -16,8 +16,8 @@ We perform evaluation using clean mono speech from WSJ0 convolved with simulated
 - TensorFlow / Keras
 - NumPy & SciPy
 - matplotlib & seaborn
-- [nara_wpe](https://github.com/fgnt/nara_wpe) – classical dereverberation
-- [pystoi](https://github.com/mpariente/pystoi) – STOI evaluation
+- [nara_wpe](https://github.com/fgnt/nara_wpe) - classical dereverberation
+- [pystoi](https://github.com/mpariente/pystoi) - STOI evaluation
 - [pesq](https://github.com/ludlows/python-pesq) – PESQ evaluation
 - Custom RIR simulation using the image-source method
 
