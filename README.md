@@ -66,4 +66,4 @@ This repository references their work for academic, research, and educational pu
 
 ---
 
-For detailed methodology and results, please refer to our [Final Report (PDF)](./Project_Final_Report-_Model_based_deep_learning.pdf).
+For detailed methodology and results, please refer to our [Final Report (PDF)](./Project_Final_Report-_Model_based_deep_learning.pdf). (will be uploaded soon)
