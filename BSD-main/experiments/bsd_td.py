@@ -873,6 +873,12 @@ if __name__ == "__main__":
         bsd = bsd(config, set='valid')
         bsd.save_audio_samples_to_compare(number_of_estimations=3)
 
+
+    if args.mode == 'save_audio_samples_to_compare':
+        bsd = bsd(config, set='valid')
+        bsd.save_audio_samples_to_compare(number_of_estimations=1)
+>>>>>>> e42b8b5 (ran validation on new weights)
+
     if args.mode == 'plot_dereverb_comparison':
         bsd = bsd(config)
         bsd.plot_dereverb_comparison()

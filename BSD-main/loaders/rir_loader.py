@@ -105,7 +105,7 @@ class rir_loader(object):
         Fh = np.zeros((nsrc, self.samples//2+1, self.nmic), dtype=np.complex64)
         Fh_ref = np.zeros((nsrc, self.samples//2+1, self.nmic), dtype=np.complex64)
         for n in range(nsrc):
-            rir_idx = np.random.choice(rir_list[pid[n]])
+            rir_idx = 0 #np.random.choice(rir_list[pid[n]])
             Fh[n,:,:] = self.Fh[rir_idx,:,:]
             Fh_ref[n,:,:] = self.Fh_ref[rir_idx,:,:]
 
@@ -118,14 +118,14 @@ class rir_loader(object):
     def generate_shoebox_rir(self,):
 
         # match rt60 of the recorded RIRs
-        rt60 = np.random.uniform(0.2, 0.3)*0.6       # 0.6 = compensation factor to match true rt60
-
+        #rt60 = np.random.uniform(0.2, 0.3)*0.6       # 0.6 = compensation factor to match true rt60
+        rt60 = 0.18
         # define random room dimensions
         x = np.random.uniform(3,6)
         y = np.random.uniform(3,6)
         z = 3
         room_dim = np.asarray([x,y,z])
-
+        print(f"\n------Generating RIR with room dimentions: x: {x}, y: {y}, z: {z} and T60: {rt60}-----\n")
         # invert Sabine's formula to obtain the parameters for the ISM simulator
         absorption, max_order = pra.inverse_sabine(rt60, room_dim)
 
@@ -165,7 +165,7 @@ class rir_loader(object):
 
 
     #----------------------------------------------------------------------------
-    def generate_shoebox_rirs(self, nrir):
+    def generate_shoebox_rirs(self, nrir=720):
 
         h = []
         for r in range(nrir):
@@ -199,7 +199,7 @@ if __name__ == "__main__":
 
 
     rir_loader = rir_loader(config)
-    rir_loader.generate_shoebox_rirs(720)
+    rir_loader.generate_shoebox_rirs(1)
 
 
 
