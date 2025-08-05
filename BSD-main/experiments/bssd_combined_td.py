@@ -34,6 +34,7 @@ from modules.identification_td import identification
 
 from classic.wpe_wrapper import ClassicWPE
 from pathlib import Path
+import ipdb
 
 
 np.set_printoptions(precision=3, threshold=3, edgeitems=3)
@@ -60,7 +61,8 @@ class bssd(object):
         self.is_load_weights = config.get("is_load_weights", True)
         self.is_save_weights = config.get("is_save_weights", True)
 
-        os.makedirs(self.config['log_path'], exist_ok=True)
+        self.log_path = os.path.join(self.config['log_path'], "bssd")
+        os.makedirs(self.log_path, exist_ok=True)
 
         if self.speakers_configed > self.fgen.nspk:
             print(f"[warn] --speakers clipped from {self.speakers_configed} to {self.fgen.nspk}")
@@ -71,7 +73,11 @@ class bssd(object):
         self.filename = os.path.basename(__file__)
         self.name = self.filename[:-3] + '_' + config['rir_type']
         self.creation_date = os.path.getmtime(self.filename)
-        self.weights_file = self.config['weights_path'] + self.name + '.h5'
+        # self.weights_file = self.config['weights_path'] + self.name + '.h5'
+        weights_dir  = self.config["weights_path"]          # e.g. "../weights/"
+        weight_file_name    = self.config.get("weight_file", "bsd_td_shoebox1.h5")
+        self.weights_file = os.path.join(weights_dir, weight_file_name)
+
         self.predictions_file = self.config['predictions_path'] + self.name + '.mat'
         self.predictions_file_for_compare = self.config['predictions_for_compare_path'] + self.name + '.mat'
 
@@ -89,8 +95,10 @@ class bssd(object):
         self.beamforming = beamforming(self.fgen)
         self.identification = identification(self.fgen)
         self.create_model()
+        self._print_dataset_stats()
+        ipdb.set_trace() 
 
-        # for benchmark
+
         self.wpe_model = ClassicWPE()
 
         self.si_sdr = []
@@ -107,6 +115,41 @@ class bssd(object):
                 self.si_sdr = data['si_sdr']
                 self.eer = data['eer']
 
+
+    #---------------------------------------------------------
+    def _print_dataset_stats(self,final_epoch=None):
+        # total clips in the subset
+        total_clips = len(self.fgen.audio_loader.file_list)
+
+        # clips the net sees each training step
+        clips_per_step = self.speakers * 3      # speakers × 3 utt
+
+        # expected repeat factor r
+        r_est = (self.config["epochs"] * clips_per_step) / total_clips
+
+        # model capacity (params) vs examples
+        n_params = self.model.count_params()
+
+        fs = self.config['fs']
+        n_epochs = final_epoch or self.config["epochs"]
+
+        frames_per_clip = self.fgen.audio_loader.nfram
+        frames_per_step  = clips_per_step * frames_per_clip
+        total_frames_tr  = frames_per_step * n_epochs
+
+        frames_per_param = total_frames_tr/self.model.count_params()
+        print(f"  total training STFT frames              : {total_frames_tr}")
+        print(f"  STFT frames (examples) per parameter    : {frames_per_param:.0f}")
+
+        print("\n[DATA STATS]")
+        print(f"  total speakers           : {self.fgen.nspk}")
+        print(f"  total clips              : {total_clips}")
+        print(f"  speakers per batch       : {self.speakers}")
+        print(f"  clips per step           : {clips_per_step}")
+        print(f"  planned epochs           : {self.config['epochs']}")
+        print(f"  total epochs             : {final_epoch}")
+        print(f"  estimated repeat factor r: {r_est:.2f}")
+        print(f"  model trainable params   : {n_params:,}\n")
 
 
     #---------------------------------------------------------
@@ -163,7 +206,8 @@ class bssd(object):
             if (self.epoch % save_every)==0:
                 self.save_weights()
                 self.validate()
-
+        
+        self.plot_save_training_metrixes()
     #---------------------------------------------------------
     def save_rev_files(self):
         count =  0
@@ -359,6 +403,52 @@ class bssd(object):
         draw_subpcolor(specs, legend, save_path)
 
         print(f"Spectrogram saved to {save_path}")
+    #---------------------------------------------------------
+    def  plot_save_training_metrixes(self):
+        """
+        Dump self.history to CSV and save a 2×2 grid with STOI, SI-SDR, PESQ.
+        """
+        if not self.history:
+            return
+
+        df = pd.DataFrame(self.history)
+        df.to_csv(os.path.join(self.log_path, "val_curve_bssd.csv"), index=False)
+        df.to_csv(os.path.join(self.log_path, f"val_curve_bssd_{self.timestamp}.csv"), index=False)
+        print("validation curve saved to val_curve_bssd.csv")
+
+        fig, ax = plt.subplots(2, 2, figsize=(7, 7))
+        axes = ax.flatten() 
+            
+        # subplot 1 – Validation STOI   
+        axes[0].plot(df["epoch"], df["train_stoi"], label="train")
+        axes[0].plot(df["epoch"], df["val_stoi_bsd"], label="valid")
+        axes[0].set_xlabel("epoch")
+        axes[0].set_ylabel("STOI")
+        axes[0].set_title("BSSD: Train vs Validation STOI")
+        axes[0].legend()
+
+        # subplot 2 – Validation SI-SDR
+        axes[1].plot(df["epoch"], df["train_si_sdr"], label="train")
+        axes[1].plot(df["epoch"], df["val_si_sdr"],   label="valid")        
+        axes[1].set_xlabel("epoch")
+        axes[1].set_ylabel("SI-SDR (dB)")
+        axes[1].set_title("BSSD: Train vs Validation SI-SDR")
+        axes[1].legend()
+
+        # subplot 3 – Validation PESQ
+        axes[2].plot(df["epoch"], df["train_pesq"], label="train")
+        axes[2].plot(df["epoch"], df["val_pesq_bsd"],   label="valid")
+        axes[2].set_xlabel("epoch")
+        axes[2].set_ylabel("PESQ")
+        axes[2].set_title("BSSD: Train vs Validation PESQ")
+        axes[2].legend()
+
+        axes[3].axis("off")
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.log_path, "val_curves_bssd.png"))
+        plt.savefig(os.path.join(self.log_path, f"val_curves_bssd_{self.timestamp}.png"))
+
+        plt.close(fig)
 
     #---------------------------------------------------------
     def plot(self):
@@ -434,6 +524,11 @@ if __name__ == "__main__":
     parser.add_argument('--config_file', help='name of json configuration file', default='shoebox_c2.json')
     #parser.add_argument('--mode', help='mode: [train, valid, plot]', nargs='?', choices=('train', 'valid', 'plot'), default='train')
     parser.add_argument('--mode', help='mode: [train, valid, plot,save_rev_files]', nargs='?', choices=('train', 'valid','valid_with_wpe', 'plot','plot_dereverb_comparison','save_rev_files'), default='train')
+
+    parser.add_argument('--weight_file',
+                    help='name of saved weight_file file',
+                    default='bssd_combined_td_shoebox1.h5')
+
     args = parser.parse_args()
 
 
@@ -446,7 +541,12 @@ if __name__ == "__main__":
         print('*** could not load config file: %s' % args.config_file)
         quit(0)
 
+    file_name = args.weight_file
+    if not file_name.lower().endswith(".h5"):
+        file_name += ".h5"
+        print(f"[info] weight_file extension missing → using '{file_name}'")
 
+    config["weight_file"] = file_name          # ← NEW
 
     if args.mode == 'train':
         bssd = bssd(config)

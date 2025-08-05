@@ -35,6 +35,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import ipdb
 from pystoi import stoi
+import re, glob
+
 
 
 np.set_printoptions(precision=3, threshold=3, edgeitems=3)
@@ -58,7 +60,7 @@ class bsd(object):
         self.fgen = feature_generator(config, set)
         self.fgen_va = feature_generator(config, set="valid")   # ← new
         self.nsrc = config['nsrc']                      # number of concurrent speakers
-        self.timestamp = time.strftime("%Y%m%d-%H%M%S")
+        # self.timestamp = time.strftime("%Y%m%d-%H%M%S")
 
         self.speakers_configed = config.get("speakers", 20)
         self.speakers_per_batch = min(self.speakers_configed, self.fgen.nspk)         # self.fgen.nspk - number of speakers in date set
@@ -87,6 +89,51 @@ class bsd(object):
         print(f"\n DEFINED THE FOLLOWING WEIGHTS: \n {self.weights_file}.\n")
 
         # self.weights_file = self.config['weights_path'] + self.name + '.h5'
+
+        weights_dir  = self.config['weights_path']      # e.g. "../weights/"
+        weight_file_name    = self.config.get("weight_file", "bsd_td_shoebox1.h5")
+        if not weight_file_name.lower().endswith(".h5"):
+            weight_file_name += ".h5"
+        
+        self.weights_file = os.path.join(weights_dir, weight_file_name)
+
+        self.epoch = 0
+        history_path = os.path.join(self.config['log_path'], "val_curve.csv")
+        self.history = []
+
+        if self.is_load_weights: 
+            if os.path.exists(history_path):
+                df = pd.read_csv(history_path)
+                self.history = df.to_dict(orient="records")  # convert to list of dicts
+
+                if len(df) > 0:
+                    self.epoch = int(df["epoch"].max())
+                    print(f"Loaded history: {len(df)} epochs (resuming from epoch {self.epoch+1})")
+                else:
+                    print("val_curve.csv is empty. Starting from scratch.")
+            else:
+                print("No val_curve.csv found. Starting from scratch.")
+        else:
+            print("Skipping load_state (flag=False)", flush=True)
+
+        if self.epoch == 0:
+        # new training
+            self.timestamp = time.strftime("%Y%m%d-%H%M%S")
+            print(f"[new run] timestamp = {self.timestamp}")
+        else:
+        # continue training
+            files = sorted(glob.glob(os.path.join(self.config["log_path"],"val_curve_*.csv")))
+            if files:
+                last = files[-1]                            
+                m = re.search(r"val_curve_(\d{8}-\d{6})\.csv", os.path.basename(last))
+                self.timestamp = m.group(1) if m else time.strftime("%Y%m%d-%H%M%S")
+                print(f"[resume] continuing with timestamp {self.timestamp}")
+            else:
+                self.timestamp = time.strftime("%Y%m%d-%H%M%S")
+
+        
+
+
         self.predictions_file = self.config['predictions_path'] + self.name + '.mat'
         # self.predictions_file_for_compare = self.config['predictions_for_compare_path'] + self.name + '.mat'
         self.predictions_file_for_compare = self.config['validation_comparison_path'] + self.name + '_bsd_vs_wpe_metrics.csv'
@@ -113,45 +160,7 @@ class bsd(object):
         # for benchmark
         self.wpe_model = ClassicWPE()
 
-
-        self.epoch = 0
-        history_path = os.path.join(self.config['log_path'], "val_curve.csv")
-        self.history = []
-
-        if self.is_load_weights: 
-            if os.path.exists(history_path):
-                df = pd.read_csv(history_path)
-                self.history = df.to_dict(orient="records")  # convert to list of dicts
-
-                if len(df) > 0:
-                    self.epoch = int(df["epoch"].max())
-                    print(f"Loaded history: {len(df)} epochs (resuming from epoch {self.epoch+1})")
-                else:
-                    print("val_curve.csv is empty. Starting from scratch.")
-            else:
-                print("No val_curve.csv found. Starting from scratch.")
-        else:
-            print("Skipping load_state (flag=False)", flush=True)
-
-
-        # self.si_sdr_bsd = []
-        # self.si_sdr_wpe = []
-        # self.epoch = 0
-        # if self.is_load_weights:
-        #     # data = load_numpy_from_mat(self.predictions_file)
-        #     data = load_numpy_from_mat(self.predictions_file_for_compare)
-        #     print(data.keys())
-        #     # ipdb.set_trace()
-
-        #     if data is not None:
-        #         if 'epoch' in data.keys():
-        #             self.epoch = data['epoch']
-        #             self.si_sdr_bsd = data['si_sdr_bsd']
-        #             self.si_sdr_wpe = data['si_sdr_wpe']
-        #             # self.eer = data['eer']
-        # else:
-        #     print("skipping load_state (flag=False)", flush=True)
-
+    
     #---------------------------------------------------------
 
     def _print_dataset_stats(self,final_epoch=None):
@@ -162,7 +171,7 @@ class bsd(object):
         clips_per_step = self.speakers_per_batch * 3      # speakers × 3 utt
 
         # expected repeat factor r
-        r_est = (self.config["epochs"] * clips_per_step) / total_clips
+        r_est = (self.config["epochs"] * clips_per_step) / self.batch_size
 
         # model capacity (params) vs examples
         n_params = self.model.count_params()
@@ -227,7 +236,6 @@ class bsd(object):
             print("skipping load_weights (flag=False or file missing)", flush=True)
 
 
-
     #---------------------------------------------------------
     def save_weights(self):
         print(f"need to save weights here from {self.weights_file}")
@@ -240,7 +248,8 @@ class bsd(object):
 
     #---------------------------------------------------------
     def train(self):
-        # ipdb.set_trace()
+        # ipdb.set_tr
+        # ace()
         print('train the model')
         if not self.history:
             self.history = []        
@@ -264,6 +273,17 @@ class bsd(object):
                             verbose=self.verbose,
                             shuffle=False,
                             callbacks=[self.logger])
+
+            train_pred = self.model.predict([z, r, pid[:, 0], sid[:, 0]],
+                                batch_size=self.batch_size)
+            
+            train_si_sdr = float(self.beamforming.si_sdr(r, train_pred))
+            train_stoi = float(stoi(r[0], train_pred[0], self.config["fs"], extended=False))
+            # try:
+            #     train_pesq = float(pesq(self.config["fs"], r[0], train_pred[0], "wb"))
+            # except cypesq.NoUtterancesError:
+            #     train_pesq = np.nan
+
             print(f"finished epoch {self.epoch + 1}/{self.config['epochs']}")
 
 
@@ -271,8 +291,11 @@ class bsd(object):
             self.epoch += 1
             if self.epoch <= 200:
                 save_every = 5          # first ephocs
-            else:
+            elif self.epoch <= 1000:
                 save_every = 10         # advansed ephocs
+            else:
+                save_every = 30
+
             # if (self.epoch%save_every)==0:
             #     self.save_weights()
             #     self.validate()
@@ -282,7 +305,11 @@ class bsd(object):
 
                 # ---------- run validate_with_wpe() and log metrics ---------------
                 val_dict = self.validate_with_wpe(is_training=1)          # make sure validate_with_wpe() returns a dict
+                val_dict["train_si_sdr"] = train_si_sdr     # ← NEW
+                val_dict["train_stoi"]   = train_stoi       # ← NEW
+                # val_dict["train_pesq"]   = train_pesq       # ← NEW
                 val_dict["epoch"] = self.epoch
+
                 self.history.append(val_dict)
                 
                 current_si_sdr = val_dict["val_si_sdr"]
@@ -309,38 +336,55 @@ class bsd(object):
                 if epochs_since_improvement >= 15:
                     print(f"[early stop] stopping training at epoch {self.epoch} due to no improvement in val_si_sdr")
                     break
-
         # --------------- write history once at the end -------------------
-        if self.history:
-            pd.DataFrame(self.history).to_csv("val_curve.csv", index=False)
-            print("validation curve saved to val_curve.csv")
-            df = pd.DataFrame(self.history)
+        self.plot_save_training_metrixes()
 
-            # plt.plot(df["epoch"], df["val_wpe"])
-            # plt.xlabel("epoch"); plt.ylabel("Validation WPE")
-            # plt.title("Validation curve"); plt.tight_layout()
-            # plt.savefig(os.path.join(self.config['log_path'], "val_curve.png"))
-            # plt.savefig(os.path.join(self.config['log_path'], f"val_curve_{self.timestamp}.png"))
-            # plt.close()
-            fig, axes = plt.subplots(2, 1, figsize=(6, 8))
+    def  plot_save_training_metrixes(self):
+        """
+        Dump self.history to CSV and save a 2×2 grid with STOI, SI-SDR, PESQ.
+        """
+        if not self.history:
+            return
 
-            # subplot 1 – Validation STOI                ########### to replace with STOI
-            axes[0].plot(df["epoch"], df["val_stoi_bsd"])
-            axes[0].set_xlabel("epoch")
-            axes[0].set_ylabel("Validation STOI")
-            axes[0].set_title("Validation STOI curve")
+        df = pd.DataFrame(self.history)
+        df.to_csv(os.path.join(self.config['log_path'], "val_curve.csv"), index=False)
+        df.to_csv(os.path.join(self.config['log_path'], f"val_curve_{self.timestamp}.csv"), index=False)
+        print("validation curve saved to val_curve.csv")
 
-            # subplot 2 – Validation SI-SDR
-            axes[1].plot(df["epoch"], df["val_si_sdr"])
-            axes[1].set_xlabel("epoch")
-            axes[1].set_ylabel("Validation SI-SDR (dB)")
-            axes[1].set_title("Validation SI-SDR curve")
+        # fig, ax = plt.subplots(2, 2, figsize=(7, 7))
+        # axes = ax.flatten() 
+        fig, axes = plt.subplots(2, 1, figsize=(6, 8))
+            
+        # subplot 1 – Validation STOI   
+        axes[0].plot(df["epoch"], df["train_stoi"], label="train")
+        axes[0].plot(df["epoch"], df["val_stoi_bsd"], label="valid")
+        axes[0].set_xlabel("epoch")
+        axes[0].set_ylabel("STOI")
+        axes[0].set_title("BSD: Train vs Validation STOI")
+        axes[0].legend()
 
-            plt.tight_layout()
-            plt.savefig(os.path.join(self.config['log_path'], "val_curve.png"))
-            plt.savefig(os.path.join(self.config['log_path'], f"val_curve_{self.timestamp}.png"))
+        # subplot 2 – Validation SI-SDR
+        axes[1].plot(df["epoch"], df["train_si_sdr"], label="train")
+        axes[1].plot(df["epoch"], df["val_si_sdr"],   label="valid")        
+        axes[1].set_xlabel("epoch")
+        axes[1].set_ylabel("SI-SDR (dB)")
+        axes[1].set_title("BSD: Train vs Validation SI-SDR")
+        axes[1].legend()
 
-            plt.close(fig)
+        # # subplot 3 – Validation PESQ
+        # axes[2].plot(df["epoch"], df["train_pesq"], label="train")
+        # axes[2].plot(df["epoch"], df["val_pesq_bsd"],   label="valid")
+        # axes[2].set_xlabel("epoch")
+        # axes[2].set_ylabel("PESQ")
+        # axes[2].set_title("BSD: Train vs Validation PESQ")
+        # axes[2].legend()
+
+        # axes[3].axis("off")
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.config['log_path'], "val_curves.png"))
+        plt.savefig(os.path.join(self.config['log_path'], f"val_curves_{self.timestamp}.png"))
+
+        plt.close(fig)
 
     #---------------------------------------------------------
     def save_rev_files(self):
@@ -360,11 +404,14 @@ class bsd(object):
         # results_dir = self.config['validation_comparison_results'] 
         # os.makedirs(self.predictions_file_for_compare, exist_ok=True)
 
+        # Create subfolder if needed
+        results_dir = self.config['validation_comparison_results']
+
         # Create spectrogram subfolder if needed
-        results_dir = self.config['validation_comparison_path'] 
         spectrogram_dir = os.path.join(results_dir, "spectrograms")
         os.makedirs(spectrogram_dir, exist_ok=True)
 
+        # results = {'method': [], 'si_sdr': [], 'stoi': [], 'pesq': []}
         results = {'method': [], 'si_sdr': [], 'stoi': []}
 
         for i in range(number_of_estimations):
@@ -378,21 +425,25 @@ class bsd(object):
             y_bsd = self.model.predict([z, r, pid[:,0], sid[:,0]], batch_size=self.validate_batch_size)
             si_sdr_bsd = self.beamforming.si_sdr(r, y_bsd)
             stoi_bsd = stoi(r[0], y_bsd[0], self.config['fs'], extended=False)
+            # pesq_bsd = pesq(self.config['fs'], r[0], y_bsd[0], mode='wb')
 
             results['method'].append('BSD')
             results['si_sdr'].append(si_sdr_bsd)
             results['stoi'].append(stoi_bsd)
+            # results['pesq'].append(pesq_bsd)
 
             y_wpe = self.wpe_model.dereverb_batch(z)
             si_sdr_wpe = self.beamforming.si_sdr(r, y_wpe)
             stoi_wpe = stoi(r[0], y_wpe[0], self.config['fs'], extended=False)
+            # pesq_wpe = pesq(self.config['fs'], r[0], y_wpe[0], mode='wb')
 
             results['method'].append('WPE')
             results['si_sdr'].append(si_sdr_wpe)
             results['stoi'].append(stoi_wpe)
+            # results['pesq'].append(pesq_wpe)
 
-            print(f"BSD - SI-SDR: {si_sdr_bsd:.2f} dB | STOI: {stoi_bsd:.3f}")
-            print(f"WPE - SI-SDR: {si_sdr_wpe:.2f} dB | STOI: {stoi_wpe:.3f}")
+            # print(f"BSD - SI-SDR: {si_sdr_bsd:.2f} dB | STOI: {stoi_bsd:.3f} | PESQ: {pesq_bsd:.2f}")
+            # print(f"WPE  - SI-SDR: {si_sdr_wpe:.2f} dB | STOI: {stoi_wpe:.3f} | PESQ: {pesq_wpe:.2f}")
 
             # Save spectrogram comparison for this estimation
             spectrogram_path = os.path.join(
@@ -416,6 +467,7 @@ class bsd(object):
         if not is_training:
             self.plot_bsd_vs_wpe_metrics(self.predictions_file_for_compare, results_dir)
         
+        # return {'val_si_sdr': float(si_sdr_bsd), 'val_stoi_bsd': float(stoi_bsd) , 'val_pesq_bsd':float(pesq_bsd)}
         return {'val_si_sdr': float(si_sdr_bsd), 'val_stoi_bsd': float(stoi_bsd)}
 
 
@@ -831,6 +883,10 @@ if __name__ == "__main__":
                     default=1,
                     help='Keras verbosity: 0 = silent, 1 = progress-bar, 2 = one-line/epoch')
 
+    parser.add_argument('--weight_file',
+                    help='name of saved weight_file file',
+                    default='bsd_td_shoebox1.h5')
+
     args = parser.parse_args()
 
 
@@ -843,6 +899,7 @@ if __name__ == "__main__":
         print('*** could not load config file: %s' % args.config_file)
         quit(0)
 
+    config["weight_file"] = args.weight_file  
 
 
     if args.mode == 'train':
@@ -853,12 +910,12 @@ if __name__ == "__main__":
             print(f" Training crashed: {e}")
             if hasattr(bsd, "history") and bsd.history:
                 df = pd.DataFrame(bsd.history)
-                df.to_csv(os.path.join(self.config['log_path'],"val_curve_crash_backup.csv"), index=False)
-                df.to_csv(os.path.join(self.config['log_path'],f"val_curve_crash_backup_{self.timestamp}.csv"), index=False)
+                df.to_csv(os.path.join(bsd.config['log_path'],"val_curve_crash_backup.csv"), index=False)
+                df.to_csv(os.path.join(bsd.config['log_path'],f"val_curve_crash_backup_{bsd.timestamp}.csv"), index=False)
                 print("Saved backup val_curve_crash_backup.csv after crash")
             raise
 
-        bsd._print_dataset_stats(final_epoch=self.epoch)
+        bsd._print_dataset_stats(final_epoch=bsd.epoch)
 
 
     if args.mode == 'valid':
