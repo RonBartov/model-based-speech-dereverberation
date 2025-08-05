@@ -118,8 +118,9 @@ class rir_loader(object):
     def generate_shoebox_rir(self,):
 
         # match rt60 of the recorded RIRs
-        #rt60 = np.random.uniform(0.2, 0.3)*0.6       # 0.6 = compensation factor to match true rt60
-        rt60 = 0.18
+        # rt60 = np.random.uniform(0.2, 0.3)*0.6       # 0.6 = compensation factor to match true rt60
+        rt60 = np.random.uniform(0.3, 0.6)       # 0.6 = compensation factor to match true rt60
+
         # define random room dimensions
         x = np.random.uniform(3,6)
         y = np.random.uniform(3,6)
